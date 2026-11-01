@@ -10,8 +10,8 @@ export const metadata = { title: "New leads · Qualent" };
 
 export default async function InboxPage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = await params;
-  await guardPage(tenantId, "leads.read");
-  const [rows, people, campaigns] = await Promise.all([listInbox(tenantId), listRoutableMembers(tenantId), listCampaigns(tenantId)]);
+  const { membership } = await guardPage(tenantId, "leads.read");
+  const [rows, people, campaigns] = await Promise.all([listInbox(tenantId, membership), listRoutableMembers(tenantId), listCampaigns(tenantId)]);
 
   return (
     <>
@@ -21,7 +21,10 @@ export default async function InboxPage({ params }: { params: Promise<{ tenantId
         actions={<AddLead tenantId={tenantId} campaigns={campaigns} />}
       />
       {!rows.length ? (
-        <Empty title="No leads are waiting" body="New leads with no owner appear here. Set up who gets leads in Client setup, and most will go straight to a person." />
+        <Empty
+          title={membership.recordScope === "assigned" ? "Your manager handles new leads" : "No leads are waiting"}
+          body={membership.recordScope === "assigned" ? "Leads assigned to you appear on your Today list and in All leads." : "New leads with no owner appear here. Set up who gets leads in Client setup, and most will go straight to a person."}
+        />
       ) : (
         <ActionForm action={bulkAssignAction} hidden={{ tenantId }} className="grid gap-3" resetOnOk>
           <TableWrap>

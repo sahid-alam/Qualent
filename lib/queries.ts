@@ -26,7 +26,9 @@ export function listFieldAgents(tenantId: string) {
 }
 
 /** New, unassigned leads with their first touch. */
-export function listInbox(tenantId: string) {
+export async function listInbox(tenantId: string, membership: Pick<Membership, "recordScope">) {
+  // Unowned leads aren't theirs, so staff limited to their own leads don't see them.
+  if (membership.recordScope === "assigned") return [];
   return withTenant(tenantId, async (db) => {
     const rows = await db
       .select({ lead: leads, contact: contacts })

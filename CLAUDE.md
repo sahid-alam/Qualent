@@ -86,7 +86,9 @@ The worker runs on Node's built-in TypeScript support with no build step, so `li
 - Inside a scrolling box, add `relative`, or hidden `sr-only` labels make the page scroll sideways.
 - All AI calls go through `aiRun()`. Lead data only reaches `no_training` models.
 - Times are `timestamptz` in UTC, money is `numeric` plus currency, phones are E.164.
-- Logs never contain phone numbers, emails or message text.
+- Logs never contain phone numbers, emails or message text. A failed query's error message includes its values, so log and store errors through `safeMessage()`, and show people only `UserError` text.
+- Anything exported to CSV goes through `safeCell()`, because lead text is untrusted and spreadsheets run formulas.
+- Staff with `recordScope: "assigned"` see and change only their own leads. New reads and writes must respect this, not just tenant isolation.
 - Before writing Next.js code, check the guide for this exact version in `node_modules/next/dist/docs/`. `next dev` creates `AGENTS.md` to say the same; keep it.
 - Keep it simple: no abstraction until there is a second use. Non-trivial logic ships with one test.
 

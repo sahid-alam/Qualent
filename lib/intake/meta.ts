@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { GRAPH_URL } from "../capi/send.ts";
 import { decryptSecret, encryptSecret } from "../crypto.ts";
 import { withPlatform, withTenant } from "../db/client.ts";
+import { safeMessage } from "../errors.ts";
 import { connections, tenantDirectory, webhookInbox } from "../db/schema.ts";
 import { enqueue } from "../jobs/queues.ts";
 import { ingestLead, type LeadInput } from "../leads/ingest.ts";
@@ -117,7 +118,7 @@ export async function processMetaLead(inboxId: string) {
     await ingestLead(inbox.tenantId, metaLeadToInput(lead, inbox.pageId));
     await markInbox(inboxId);
   } catch (error) {
-    await markInboxError(inboxId, (error as Error).message);
+    await markInboxError(inboxId, safeMessage(error));
     throw error;
   }
 }

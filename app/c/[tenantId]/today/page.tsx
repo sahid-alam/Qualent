@@ -33,10 +33,11 @@ export default async function TodayPage({ params }: { params: Promise<{ tenantId
     await db.select({ waiting: count() }).from(leads).where(and(isNull(leads.ownerMemberId), eq(leads.status, "open"))),
   ] as const);
 
+  const showWaiting = waiting > 0 && membership.recordScope !== "assigned";
   const headline = [
     overdue.length ? `${plural(overdue.length, "overdue task")}` : null,
     dueToday ? `${plural(dueToday, "task")} due today` : null,
-    waiting ? `${plural(waiting, "new lead")} waiting` : null,
+    showWaiting ? `${plural(waiting, "new lead")} waiting` : null,
   ].filter(Boolean);
 
   return (
@@ -44,7 +45,7 @@ export default async function TodayPage({ params }: { params: Promise<{ tenantId
       <PageHeader
         title={<span className="text-3xl">{headline.length ? `${headline.join(", ")}.` : "You're clear for today."}</span>}
         subtitle={`${tenant.name}, in ${tenant.timezone.replace("_", " ")} time.`}
-        actions={waiting ? <LinkButton href={`/c/${tenantId}/inbox`} variant="primary">Clear new leads</LinkButton> : undefined}
+        actions={showWaiting ? <LinkButton href={`/c/${tenantId}/inbox`} variant="primary">Clear new leads</LinkButton> : undefined}
       />
 
       <div className="grid gap-5 desk:grid-cols-[1.45fr_1fr]">

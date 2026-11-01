@@ -10,7 +10,7 @@ import { signOutAction, toggleThemeAction } from "../../auth-actions";
 
 export default async function WorkspaceLayout({ children, params }: { children: ReactNode; params: Promise<{ tenantId: string }> }) {
   const { tenantId } = await params;
-  const { can } = await guardPage(tenantId, "leads.read");
+  const { can, membership } = await guardPage(tenantId, "leads.read");
   const userId = await requireUserId();
 
   const [tenants, [{ waiting }], [profile], store] = await Promise.all([
@@ -23,7 +23,7 @@ export default async function WorkspaceLayout({ children, params }: { children: 
   const base = `/c/${tenantId}`;
   const items: NavItem[] = [
     { href: `${base}/today`, label: "Today", icon: "today", primary: true },
-    { href: `${base}/inbox`, label: "New leads", icon: "inbox", badge: waiting, primary: true },
+    { href: `${base}/inbox`, label: "New leads", icon: "inbox", badge: membership.recordScope === "assigned" ? 0 : waiting, primary: true },
     { href: `${base}/pipeline`, label: "Pipeline", icon: "pipeline", primary: true },
     { href: `${base}/leads`, label: "All leads", icon: "leads", primary: true },
     { href: `${base}/reports`, label: "Reports", icon: "reports" },

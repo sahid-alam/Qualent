@@ -25,9 +25,14 @@ export type LeadInput = {
   custom?: Record<string, unknown>;
   note?: string;
   actor?: string;
+  /** Set for staff limited to their own leads: they own what they add, and can't touch others'. */
+  ownedBy?: string;
 };
 
 export class InvalidLeadError extends Error {}
+
+/** The person already has an open lead that this staff member can't access. */
+export class LeadNotAccessibleError extends Error {}
 
 /** Every lead source ends here. Safe to run twice on the same event. */
 export async function ingestLead(tenantId: string, input: LeadInput) {
@@ -55,6 +60,8 @@ export async function ingestLead(tenantId: string, input: LeadInput) {
       const touch = { tenantId, source: input.source, ...input.touch };
 
       if (openLead) {
+        // Throwing rolls back everything above, so nothing reaches the other person's lead.
+        if (input.ownedBy && openLead.ownerMemberId !== input.ownedBy) throw new LeadNotAccessibleError();
         await db.insert(touches).values({ ...touch, leadId: openLead.id });
         await db.insert(activities).values({
           tenantId,
@@ -86,6 +93,7 @@ export async function ingestLead(tenantId: string, input: LeadInput) {
           stageId: firstStage.id,
           custom: input.custom ?? {},
           needsReview: conflict,
+          ...(input.ownedBy ? { ownerMemberId: input.ownedBy, assignedAt: new Date() } : {}),
         })
         .returning();
       await db.insert(touches).values({ ...touch, leadId: lead.id });

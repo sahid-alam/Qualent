@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
+import { safeMessage } from "../errors.ts";
 import { getLead } from "../leads/work.ts";
 import { ForbiddenError, requireMember, type Action, type Membership } from "../permissions.ts";
 import { requireUserId } from "./session.ts";
@@ -49,7 +50,7 @@ export function action<S extends z.ZodObject>(
       unstable_rethrow(error); // Redirects are thrown, and must reach Next.js.
       if (error instanceof UserError) return { error: error.message };
       if (error instanceof ForbiddenError) return { error: "You don't have permission to do that." };
-      console.error(`action failed: ${(error as Error).message}`);
+      console.error(`action failed: ${safeMessage(error)}`);
       return { error: "That didn't save. Try again." };
     }
   };

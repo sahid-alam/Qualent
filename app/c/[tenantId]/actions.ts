@@ -4,16 +4,16 @@ import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { draftReply } from "../../../lib/ai/tasks.ts";
-import { action, requireLeadAccess, UserError } from "../../../lib/auth/action.ts";
+import { action, requireLeadAccess, UserError, type Context } from "../../../lib/auth/action.ts";
 import { logoDataUrl } from "../../../lib/brand.ts";
 import { withTenant } from "../../../lib/db/client.ts";
 import { tenants, type AutomationStep } from "../../../lib/db/schema.ts";
 import { localToUtc } from "../../../lib/time.ts";
 import { saveConnection } from "../../../lib/intake/meta.ts";
-import { ingestLead, InvalidLeadError } from "../../../lib/leads/ingest.ts";
+import { ingestLead, InvalidLeadError, LeadNotAccessibleError } from "../../../lib/leads/ingest.ts";
 import { bulkUpdateLeads, changeStage, completeTask, createNote, createTask, getTask, importCsv, logCall, saveView, setCustomFields } from "../../../lib/leads/work.ts";
 import { eraseContact } from "../../../lib/privacy.ts";
-import { deliverLead } from "../../../lib/routing.ts";
+import { deliverLead, DeliveryError } from "../../../lib/routing.ts";
 import {
   addPerson,
   approveAnalysis,
@@ -36,6 +36,10 @@ const required = (message: string) => z.string().trim().min(1, message);
 const optional = z.string().trim().optional();
 const CALL_OUTCOMES = ["reached", "no_answer", "wrong_number", "call_back"] as const;
 
+function ownedBy({ membership }: Context) {
+  return membership.recordScope === "assigned" ? (membership.memberId ?? undefined) : undefined;
+}
+
 export const addLeadAction = action(
   "leads.write",
   z.object({
@@ -46,7 +50,8 @@ export const addLeadAction = action(
     campaignId: optional,
     note: optional,
   }),
-  async (data, { actor }) => {
+  async (data, context) => {
+    const { actor } = context;
     try {
       const note = [`Came in by ${data.channel}.`, data.note].filter(Boolean).join("\n");
       const { leadId: id, created } = await ingestLead(data.tenantId, {
@@ -57,10 +62,12 @@ export const addLeadAction = action(
         note,
         touch: data.campaignId ? { campaignId: data.campaignId } : undefined,
         actor,
+        ownedBy: ownedBy(context),
       });
       return { ok: created ? "Lead added." : "This person already has an open lead, so the note went there.", data: { leadId: id } };
     } catch (error) {
       if (error instanceof InvalidLeadError) throw new UserError("Add a phone number or an email.");
+      if (error instanceof LeadNotAccessibleError) throw new UserError("Someone else is already handling this person. Ask your manager.");
       throw error;
     }
   },
@@ -89,7 +96,8 @@ export const deliverAction = action("leads.write", z.object({ leadId, memberId: 
   try {
     await deliverLead(data.tenantId, data.leadId, data.memberId, context.actor);
   } catch (error) {
-    throw new UserError((error as Error).message);
+    if (error instanceof DeliveryError) throw new UserError(error.message);
+    throw error;
   }
   return "Sent to the client's agent.";
 });
@@ -140,10 +148,10 @@ export const saveViewAction = action("leads.write", z.object({ name: required("N
   return "View saved.";
 });
 
-export const importCsvAction = action("leads.write", z.object({ file: z.instanceof(File, { message: "Choose a CSV file." }) }), async (data, { actor }) => {
+export const importCsvAction = action("leads.write", z.object({ file: z.instanceof(File, { message: "Choose a CSV file." }) }), async (data, context) => {
   if (!data.file.size) throw new UserError("Choose a CSV file.");
   if (data.file.size > 5_000_000) throw new UserError("That file is over 5 MB. Split it and try again.");
-  const report = await importCsv(data.tenantId, await data.file.text(), actor);
+  const report = await importCsv(data.tenantId, await data.file.text(), context.actor, ownedBy(context));
   const failed = report.errors.length ? ` ${report.errors.length} failed, first at row ${report.errors[0].row}: ${report.errors[0].message}.` : "";
   return `Created ${report.created}. Duplicates added to existing leads: ${report.duplicates}.${failed}`;
 });

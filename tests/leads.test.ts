@@ -4,7 +4,10 @@ import { withTenant } from "../lib/db/client.ts";
 import { activities, contacts, customFieldDefs, leads, stageHistory, touches } from "../lib/db/schema.ts";
 import { enqueue, getBoss } from "../lib/jobs/queues.ts";
 import { ingestLead } from "../lib/leads/ingest.ts";
-import { changeStage, exportCsv, fieldError, getLead, importCsv, listLeads, logCall, setCustomFields, todayTasks, createTask } from "../lib/leads/work.ts";
+import { changeStage, exportCsv, fieldError, getLead, importCsv, listLeads, logCall, safeCell, setCustomFields, todayTasks, createTask } from "../lib/leads/work.ts";
+import { LeadNotAccessibleError } from "../lib/leads/ingest.ts";
+import { listInbox } from "../lib/queries.ts";
+import { safeMessage } from "../lib/errors.ts";
 import { can, ForbiddenError, requireMember } from "../lib/permissions.ts";
 import { maskPhone, normalizePhone } from "../lib/phone.ts";
 import { addMember, newTenant, stageByName, uniquePhone } from "./helpers.ts";
@@ -207,4 +210,68 @@ test("each role can do only what the map allows", async () => {
   await expect(requireMember("33333333-3333-4333-8333-333333333333", id, "leads.read")).rejects.toThrow(ForbiddenError);
   expect((await requireMember(userId, id, "reports.client")).role).toBe("client_viewer");
   await withTenant(id, async (db) => expect(await db.select().from(activities)).toEqual([]));
+});
+
+test("a spreadsheet can't run a lead's text as a formula", async () => {
+  expect(safeCell("=HYPERLINK(\"http://evil\")")).toBe("'=HYPERLINK(\"http://evil\")");
+  expect(safeCell("@SUM(1)")).toBe("'@SUM(1)");
+  expect(safeCell("-2+3")).toBe("'-2+3");
+  expect(safeCell("+1 cmd")).toBe("'+1 cmd");
+  expect(safeCell("\tx")).toBe("'\tx");
+  expect(safeCell("+971501234567")).toBe("+971501234567");
+  expect(safeCell("Omar Ali")).toBe("Omar Ali");
+  expect(safeCell(null)).toBeNull();
+
+  const { id } = await newTenant();
+  await ingestLead(id, { source: "landing_page", name: "=cmd|calc", phone: "+971501230001" });
+  const csv = await exportCsv(id, {}, everyone);
+  expect(csv).toContain("'=cmd|calc");
+  expect(csv).toContain("+971501230001");
+  expect(csv).not.toContain("'+971");
+});
+
+test("staff limited to their own leads own what they add and can't touch others'", async () => {
+  const { id } = await newTenant();
+  const mine = await addMember(id, { recordScope: "assigned" });
+  const other = await addMember(id);
+  const scoped = { memberId: mine.id, recordScope: "assigned" } as const;
+
+  // What they add, they can open, and routing leaves it with them.
+  const added = await ingestLead(id, { source: "manual", email: "new@example.com", ownedBy: mine.id });
+  expect((await getLead(id, added.leadId, scoped))?.lead.ownerMemberId).toBe(mine.id);
+
+  // Someone else's open lead stays untouched, including the contact's blanks.
+  const taken = await ingestLead(id, { source: "manual", email: "taken@example.com" });
+  await withTenant(id, (db) => db.update(leads).set({ ownerMemberId: other.id }).where(eq(leads.id, taken.leadId)));
+  await expect(ingestLead(id, { source: "manual", name: "Overwrite", email: "taken@example.com", note: "Sneaky note", ownedBy: mine.id })).rejects.toThrow(LeadNotAccessibleError);
+  const lead = await getLead(id, taken.leadId, everyone);
+  expect(lead?.contact.name).toBeNull();
+  expect(lead?.timeline.some((item) => item.body === "Sneaky note")).toBe(false);
+  expect(lead?.touches).toHaveLength(1);
+
+  // CSV follows the same rule, one row at a time.
+  const report = await importCsv(id, "name,email\nA,taken@example.com\nB,fresh@example.com\n", "t", mine.id);
+  expect(report).toEqual({ created: 1, duplicates: 0, errors: [{ row: 2, message: "Someone else is already handling this person" }] });
+});
+
+test("the new-leads inbox stays empty for staff limited to their own leads", async () => {
+  const { id } = await newTenant();
+  await ingestLead(id, { source: "manual", email: "waiting@example.com" });
+  expect(await listInbox(id, { recordScope: "all" })).toHaveLength(1);
+  expect(await listInbox(id, { recordScope: "assigned" })).toEqual([]);
+});
+
+test("a failed query's values never reach logs or the screen", async () => {
+  const { id } = await newTenant();
+  const failure = await withTenant(id, (db) => db.insert(contacts).values({ tenantId: crypto.randomUUID(), name: "Secret Name", phoneE164: "+971509998877" })).catch((error) => error);
+  expect(failure.message).toContain("+971509998877"); // Why this matters: Drizzle includes them.
+  const safe = safeMessage(failure);
+  expect(safe).toMatch(/^Database error/);
+  expect(safe).not.toMatch(/Secret Name|971509998877/);
+  expect(safeMessage(new Error("Meta returned 503"))).toBe("Meta returned 503");
+  expect(safeMessage(undefined)).toBe("Unknown error");
+
+  const report = await importCsv(id, "name,phone\nAli,+971501110000\n", "t", "not-a-uuid");
+  expect(JSON.stringify(report.errors)).not.toMatch(/971501110000|params/);
+  expect(report.errors[0].message).toBe("This row couldn't be saved");
 });

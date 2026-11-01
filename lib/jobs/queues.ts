@@ -1,5 +1,6 @@
 import { PgBoss, type SendOptions } from "pg-boss";
 import type { Db } from "../db/client.ts";
+import { safeMessage } from "../errors.ts";
 
 // Order matters: lead alerts run before anything slow.
 export const QUEUES = {
@@ -33,7 +34,7 @@ export function getBoss() {
       schedule: false,
       migrate: false,
     });
-    instance.on("error", (error) => console.error("pg-boss error:", error.message));
+    instance.on("error", (error) => console.error("pg-boss error:", safeMessage(error)));
     await instance.start();
     boss = instance;
     return instance;

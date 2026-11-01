@@ -11,7 +11,7 @@ vi.mock("next/navigation", () => ({ unstable_rethrow: vi.fn(), redirect: vi.fn()
 vi.mock("../lib/auth/session.ts", () => ({ requireUserId: async () => session.userId }));
 
 const { action, UserError } = await import("../lib/auth/action.ts");
-const { completeTaskAction } = await import("../app/c/[tenantId]/actions.ts");
+const { addLeadAction, completeTaskAction, deliverAction } = await import("../app/c/[tenantId]/actions.ts");
 
 const form = (values: Record<string, string | string[]>) => {
   const data = new FormData();
@@ -99,4 +99,24 @@ test("an assigned-only agent cannot complete a task on someone else's lead", asy
   await addMember(id, { userId: session.userId, role: "agent", recordScope: "all" });
   expect((await completeTaskAction(null, form({ tenantId: id, taskId: task.id }))).ok).toBe("Done.");
   expect((await getTask(id, task.id)).doneAt).toBeInstanceOf(Date);
+});
+
+test("an assigned-only agent is told a person is taken, and gets no lead id", async () => {
+  const { id } = await newTenant();
+  await ingestLead(id, { source: "manual", email: "held@example.com" });
+  session.userId = crypto.randomUUID();
+  await addMember(id, { userId: session.userId, role: "agent", recordScope: "assigned" });
+  const result = await addLeadAction(null, form({ tenantId: id, email: "held@example.com", channel: "Phone" }));
+  expect(result).toEqual({ error: "Someone else is already handling this person. Ask your manager." });
+});
+
+test("delivery shows its own reasons, and hides anything unexpected", async () => {
+  const { id } = await newTenant();
+  const { leadId } = await ingestLead(id, { source: "manual", email: "deliver@example.com" });
+  session.userId = crypto.randomUUID();
+  const manager = await addMember(id, { userId: session.userId, role: "manager" });
+  const agent = await addMember(id, { role: "field_agent" });
+  const send = (memberId: string) => deliverAction(null, form({ tenantId: id, leadId, memberId }));
+  expect(await send(agent.id)).toEqual({ error: "This agent has not linked Telegram" });
+  expect(await send(manager.id)).toEqual({ error: "Not an active client agent" });
 });

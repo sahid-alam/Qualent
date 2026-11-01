@@ -3,6 +3,7 @@ import { handleEvent, runSteps, sweep } from "../automation.ts";
 import { runAdAnalysis, runLeadInsights } from "../ai/tasks.ts";
 import { sendCapiEvent } from "../capi/send.ts";
 import { withPlatform } from "../db/client.ts";
+import { safeMessage } from "../errors.ts";
 import { webhookInbox, workerHeartbeat } from "../db/schema.ts";
 import { processLandingLead } from "../intake/landing.ts";
 import { markInbox, markInboxError, pollMetaLeads, processMetaLead } from "../intake/meta.ts";
@@ -23,7 +24,7 @@ async function processTelegramInbox(inboxId: string) {
     await processTelegramUpdate(row.payload);
     await markInbox(inboxId);
   } catch (error) {
-    await markInboxError(inboxId, (error as Error).message);
+    await markInboxError(inboxId, safeMessage(error));
     throw error;
   }
 }
@@ -72,9 +73,9 @@ export async function drain(options: { queues?: QueueName[]; budgetMs?: number }
           await boss.complete(queue, job.id);
           processed++;
         } catch (error) {
-          // Job ids and queue names only. Messages here must not carry personal data.
-          console.error(`${name} failed (job ${job.id}): ${(error as Error).message}`);
-          await boss.fail(queue, job.id, { message: (error as Error).message.slice(0, 500) });
+          const message = safeMessage(error);
+          console.error(`${name} failed (job ${job.id}): ${message}`);
+          await boss.fail(queue, job.id, { message });
         }
       }
     }
@@ -106,6 +107,6 @@ export async function tick(options: { budgetMs?: number } = {}) {
   await boss.sendThrottled("maintenance", { type: "inbox_cleanup" }, null, 86_400, "inbox_cleanup");
 
   // Upkeep is normally on a timer, but functions do not stay alive between ticks.
-  await boss.supervise().catch((error) => console.error(`supervise failed: ${error.message}`));
+  await boss.supervise().catch((error) => console.error(`supervise failed: ${safeMessage(error)}`));
   return drain(options);
 }

@@ -4,7 +4,7 @@ import { withTenant, type Db } from "../db/client.ts";
 import { activities, contacts, customFieldDefs, leads, savedViews, stages, tasks, touches } from "../db/schema.ts";
 import { enqueue } from "../jobs/queues.ts";
 import type { Membership } from "../permissions.ts";
-import { addNote, ingestLead } from "./ingest.ts";
+import { addNote, ingestLead, InvalidLeadError, LeadNotAccessibleError } from "./ingest.ts";
 import { moveStage } from "./stage.ts";
 
 const RESCORE_DEBOUNCE_SECONDS = 120;
@@ -234,7 +234,7 @@ export function setCustomFields(tenantId: string, leadId: string, values: Record
 
 
 /** One transaction per row, so one bad row never loses the others. */
-export async function importCsv(tenantId: string, csv: string, actor: string) {
+export async function importCsv(tenantId: string, csv: string, actor: string, ownedBy?: string) {
   const { data, errors: parseErrors } = Papa.parse<Record<string, string>>(csv, {
     header: true,
     skipEmptyLines: "greedy",
@@ -251,24 +251,37 @@ export async function importCsv(tenantId: string, csv: string, actor: string) {
         note: row.note || undefined,
         touch: row.campaign_id ? { campaignId: row.campaign_id } : undefined,
         actor,
+        ownedBy,
       });
       if (result.created) report.created++;
       else report.duplicates++;
     } catch (error) {
-      report.errors.push({ row: index + 2, message: (error as Error).message });
+      report.errors.push({ row: index + 2, message: csvRowError(error) });
     }
   }
   return report;
+}
+
+function csvRowError(error: unknown) {
+  if (error instanceof InvalidLeadError) return error.message;
+  if (error instanceof LeadNotAccessibleError) return "Someone else is already handling this person";
+  return "This row couldn't be saved";
+}
+
+/** Stops a spreadsheet running a lead's text as a formula. Clean E.164 phones stay usable. */
+export function safeCell(value: string | number | null | undefined) {
+  if (typeof value !== "string" || /^\+\d{7,15}$/.test(value)) return value;
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
 }
 
 export async function exportCsv(tenantId: string, filters: LeadFilters, membership: Pick<Membership, "memberId" | "recordScope">) {
   const { rows } = await listLeads(tenantId, { ...filters, pageSize: 200 }, membership);
   return Papa.unparse(
     rows.map(({ lead, contact, stage }) => ({
-      name: contact.name,
-      phone: contact.phoneE164 ?? contact.phoneRaw,
-      email: contact.email,
-      stage: stage.name,
+      name: safeCell(contact.name),
+      phone: safeCell(contact.phoneE164 ?? contact.phoneRaw),
+      email: safeCell(contact.email),
+      stage: safeCell(stage.name),
       status: lead.status,
       score: lead.score,
       temperature: lead.temperature,

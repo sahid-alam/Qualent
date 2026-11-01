@@ -9,6 +9,9 @@ const OUT_OF_HOURS_RETRY_SECONDS = 900;
 const DEFAULT_AGENT_SLA_MINUTES = 60;
 const MAX_AGENT_REDELIVERIES = 2;
 
+/** A reason written for the person sending the lead. */
+export class DeliveryError extends Error {}
+
 const alertTeam = (db: Db, tenantId: string, leadId: string, reason: string) =>
   enqueue(db, "telegram", { type: "team_alert", tenantId, leadId, reason });
 
@@ -97,8 +100,8 @@ export async function deliverLead(tenantId: string, leadId: string, memberId: st
         .select()
         .from(members)
         .where(and(eq(members.id, memberId), eq(members.role, "field_agent"), eq(members.active, true)));
-      if (!agent) throw new Error("Not an active client agent");
-      if (!agent.telegramChatId) throw new Error("This agent has not linked Telegram");
+      if (!agent) throw new DeliveryError("Not an active client agent");
+      if (!agent.telegramChatId) throw new DeliveryError("This agent has not linked Telegram");
       await sendToAgent(db, tenantId, leadId, agent.id, actor);
     },
     actor,
