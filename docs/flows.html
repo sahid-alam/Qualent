@@ -1,0 +1,313 @@
+<title>Qualent Flows</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a flow picker, then one flow as a numbered sequence, each step beside a small screen sketch.
+   Colors and shapes come from the product's Ember tokens (design/theme.css). */
+:root {
+  color-scheme: dark;
+  --canvas: #060505; --panel: #0a0908; --card: #141211; --inner: #1b1817;
+  --fg: #f6f3f0; --soft: #c8c0bb; --muted: #8d8480; --line: rgba(255,255,255,.09); --control: rgba(255,255,255,.36);
+  --accent: #ff8a4c; --accent-soft: rgba(255,106,43,.14); --accent-line: rgba(255,106,43,.34);
+  --from: #ff8a4c; --to: #e8410a; --on: #1a0f0a;
+  --good: #45c08a; --warn: #e0a94a; --bad: #ec6360; --info: #7fa3c9;
+  --sans: "Geist", ui-sans-serif, system-ui, sans-serif; --mono: "Geist Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  color-scheme: light;
+  --canvas: #f3efeb; --panel: #fdfcfb; --card: #f6f2ee; --inner: #efe9e4;
+  --fg: #1c1816; --soft: #3f3935; --muted: #6b625d; --line: rgba(28,24,22,.12); --control: #8f8781;
+  --accent: #b93d0a; --accent-soft: rgba(185,61,10,.1); --accent-line: rgba(185,61,10,.32);
+  --good: #1d7a52; --warn: #8f5f0c; --bad: #c0352f; --info: #2f6f95;
+} }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --canvas: #f3efeb; --panel: #fdfcfb; --card: #f6f2ee; --inner: #efe9e4;
+  --fg: #1c1816; --soft: #3f3935; --muted: #6b625d; --line: rgba(28,24,22,.12); --control: #8f8781;
+  --accent: #b93d0a; --accent-soft: rgba(185,61,10,.1); --accent-line: rgba(185,61,10,.32);
+  --good: #1d7a52; --warn: #8f5f0c; --bad: #c0352f; --info: #2f6f95;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--canvas); color: var(--fg); font: 15px/1.55 var(--sans); padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1120px; margin-inline: auto; display: grid; gap: 22px; }
+a { color: var(--accent); }
+.label { font: 500 11px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+h1 { font-size: 30px; line-height: 1.15; letter-spacing: -.025em; font-weight: 600; margin: 6px 0 8px; text-wrap: balance; }
+h2 { font-size: 22px; line-height: 1.2; letter-spacing: -.02em; font-weight: 600; margin: 6px 0; text-wrap: balance; }
+h3 { font-size: 15px; font-weight: 600; margin: 0; }
+p { margin: 0; }
+.lede { color: var(--soft); max-width: 68ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.picker a { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 15px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--soft); text-decoration: none; font-size: 14px; }
+.picker a:hover { border-color: var(--control); color: var(--fg); }
+.picker a[aria-current="true"] { background: linear-gradient(135deg, var(--from), var(--to)); color: var(--on); border-color: transparent; font-weight: 600; }
+.picker .n { font: 500 11px var(--mono); opacity: .75; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.flow { background: var(--panel); border: 1px solid var(--line); border-radius: 26px; padding: 26px 26px 28px; display: grid; gap: 22px; }
+.flow-head { display: grid; gap: 6px; }
+.flow-head p { color: var(--soft); max-width: 70ch; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.step { display: grid; grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: start; padding-block-start: 14px; border-block-start: 1px solid var(--line); }
+.step:first-child { border-block-start: 0; padding-block-start: 0; }
+.num { width: 30px; height: 30px; border-radius: 999px; display: grid; place-items: center; font: 500 12px var(--mono); background: var(--inner); color: var(--soft); font-variant-numeric: tabular-nums; }
+.step-text { display: grid; gap: 7px; min-width: 0; }
+.step-text p { color: var(--soft); }
+.who { display: inline-flex; width: fit-content; align-items: center; padding: 2px 10px; border-radius: 999px; font: 500 11px/1.6 var(--mono); border: 1px solid currentColor; }
+.who.staff { color: var(--accent); } .who.system { color: var(--muted); } .who.agent { color: var(--good); } .who.client { color: var(--info); } .who.manager { color: var(--warn); }
+.branch { display: flex; gap: 8px; color: var(--warn); font-size: 13.5px; }
+.wf { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 13px; display: grid; gap: 9px; min-width: 0; font-size: 12.5px; overflow-x: auto; }
+.wf .bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.wf strong { font-weight: 600; font-size: 13.5px; }
+.t { color: var(--muted); font-size: 11.5px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--inner); border-radius: 10px; padding: 7px 10px; min-width: 0; }
+.row.on { outline: 1px solid var(--accent-line); background: var(--accent-soft); }
+.stack { display: grid; gap: 5px; }
+.btn, .tag { display: inline-flex; align-items: center; white-space: nowrap; border-radius: 999px; font-size: 11.5px; padding: 3px 10px; border: 1px solid var(--line); color: var(--soft); }
+.btn.p { background: linear-gradient(135deg, var(--from), var(--to)); color: var(--on); border-color: transparent; font-weight: 600; }
+.tag.hot { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-line); }
+.tag.ok { color: var(--good); border-color: currentColor; } .tag.warn { color: var(--warn); border-color: currentColor; } .tag.bad { color: var(--bad); border-color: currentColor; }
+.btns { display: flex; flex-wrap: wrap; gap: 5px; }
+.field { border: 1px solid var(--control); border-radius: 999px; padding: 4px 11px; color: var(--muted); }
+.cols { display: grid; grid-template-columns: repeat(4, minmax(92px, 1fr)); gap: 6px; min-width: 400px; }
+.col { background: var(--inner); border-radius: 10px; padding: 7px; display: grid; gap: 5px; align-content: start; min-height: 78px; }
+.cardlet { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px 7px; }
+.bubble { background: var(--inner); border-radius: 14px 14px 14px 4px; padding: 9px 11px; display: grid; gap: 2px; max-width: 340px; }
+.tgb { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; max-width: 340px; }
+.tgb span { text-align: center; background: var(--inner); border-radius: 7px; padding: 5px 2px; font-size: 11.5px; color: var(--soft); }
+.tgb span.on { outline: 1px solid var(--accent); color: var(--accent); }
+table { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
+th { font: 500 10px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); text-align: start; padding: 4px 6px; white-space: nowrap; }
+td { padding: 5px 6px; border-block-start: 1px solid var(--line); white-space: nowrap; }
+th.n, td.n { text-align: end; }
+td.key { color: var(--accent); font-weight: 600; }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.tile { background: var(--inner); border-radius: 10px; padding: 7px 9px; }
+.tile b { display: block; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; padding-block-start: 18px; border-block-start: 1px solid var(--line); }
+.notes > div { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.notes ul { margin: 0; padding-inline-start: 18px; display: grid; gap: 6px; color: var(--soft); font-size: 14px; }
+.decide { background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: 18px; padding: 14px 16px; }
+.status { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.foot { color: var(--muted); font-size: 13px; max-width: 75ch; }
+@media (max-width: 760px) {
+  .flow { padding: 18px 16px 20px; }
+  .step { grid-template-columns: 34px minmax(0, 1fr); }
+  .step .wf { grid-column: 1 / -1; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="label">Frontend, step one</p>
+    <h1>Qualent flows</h1>
+    <p class="lede">Ten flows to approve before any screen is built. Each one shows who does what, in order, with a rough sketch of the screen. Names and numbers are sample data. The sketches show content and order, not final design.</p>
+    <div class="legend" aria-label="Who acts">
+      <span class="who staff">7Gence staff</span><span class="who manager">Manager</span><span class="who agent">Client's sales agent, Telegram only</span><span class="who client">Client, reports only</span><span class="who system">Qualent, automatic</span>
+    </div>
+  </header>
+  <nav class="picker" id="picker" aria-label="Flows"></nav>
+  <main id="flows"></main>
+  <p class="foot">Each flow lists the Mobbin screens it learned from. Telegram has no Mobbin examples, so those steps follow Telegram's own bot patterns.</p>
+</div>
+
+<script>
+const m = (p, label) => `<a href="https://mobbin.com/${p}" target="_blank" rel="noopener">${label}</a>`;
+const row = (a, b, on) => `<div class="row${on ? " on" : ""}"><span>${a}</span><span>${b ?? ""}</span></div>`;
+const tg = (lines, buttons) => `<div class="bubble">${lines.join("")}</div>${buttons ? `<div class="tgb">${buttons}</div>` : ""}`;
+const wf = (title, right, body) => `<div class="wf"><div class="bar"><strong>${title}</strong><span class="btns">${right ?? ""}</span></div>${body}</div>`;
+const b = (t, p) => `<span class="btn${p ? " p" : ""}">${t}</span>`;
+const tag = (t, c) => `<span class="tag ${c ?? ""}">${t}</span>`;
+
+const FLOWS = [
+{ id: "setup", name: "Set up a client", who: "Manager", goal: "Get a new client from nothing to receiving real leads, with a test at the end so a broken setup is caught before ads run.",
+  steps: [
+  { who: "manager", t: "Create the client", d: "Enter name, country, time zone and currency, then pick a pipeline template.",
+    wf: wf("New client", b("Create", 1), `<div class="stack"><span class="field">Marina Homes</span><span class="t">United Arab Emirates · Asia/Dubai · AED</span>${row("UAE Real Estate", "7 stages", 1)}${row("General Lead Gen", "6 stages")}</div>`) },
+  { who: "manager", t: "Work through the setup checklist", d: "One page shows what is connected and what still needs action. Each item opens its own short form.",
+    wf: wf("Marina Homes setup", tag("3 of 6"), `<div class="stack">${row("Pipeline", tag("Done", "ok"))}${row("Meta page, for form leads", tag("Connected", "ok"))}${row("Meta dataset, to send results", tag("Token expired", "bad"), 1)}${row("Ad account, for spend", tag("Connected", "ok"))}${row("Telegram team group", b("Link"))}${row("Who gets leads", b("Set up"))}</div>`) },
+  { who: "manager", t: "Link Telegram", d: "Copy a one-time link and open it in the group. It expires in 15 minutes.",
+    wf: wf("Link the team group", "", `<div class="stack"><span class="field">t.me/QualentBot?start=x7Kq…</span><span class="t">Expires in 14:32</span>${row("Waiting for Telegram…", tag("Listening"))}</div>`) },
+  { who: "manager", t: "Add people and rules", d: "Add staff and client sales agents. Agents need no email or login, just a Telegram link. Choose who gets leads: take turns, weighted, or by rule.",
+    wf: wf("Who gets leads", b("Add rule"), `<div class="stack">${row("Campaign is Marina villas → Dana, Omar", "Reply in 15 min")}${row("Everyone else → Dana ×2, Omar ×1", "Reply in 15 min")}<span class="t">If nobody replies after 2 moves, it goes to the manager.</span></div>`) },
+  { who: "manager", t: "Send a test lead", d: "One button runs a fake lead through everything and shows each result, so problems appear here and not on launch day.",
+    wf: wf("Test", b("Send test lead", 1), `<div class="stack">${row("Lead arrived", tag("OK", "ok"))}${row("Assigned to Dana", tag("OK", "ok"))}${row("Telegram alert sent", tag("OK", "ok"))}${row("Event visible in Meta test tool", tag("Check Meta", "warn"))}</div>`) },
+  ],
+  refs: [m("flows/18bed708-8e87-47ce-8aed-5d4df5a581b5", "Height, add an integration") + ": the “action required” state on a connection", m("flows/c954265e-ea02-4793-ad3f-76c72f0ef766", "LangChain, integrations") + ": clear Connected and Missing badges", m("flows/3ddbc5ff-d328-4520-a8fb-8ddbcc3a721a", "Outseta, adding a pipeline") + ": we skip its blank form and start from a template"],
+  decide: "Should the checklist block launch until every item is green? My default: warn, don't block, since a client may start with landing pages only.",
+  status: ["Backend ready for connections and linking", "Adding people, rules and the test button come with the screens"] },
+
+{ id: "first-contact", name: "New lead to first call", who: "7Gence staff", goal: "The most important flow. A lead arrives and a person calls within minutes. Speed is the point, so the phone alert leads straight to the action.",
+  steps: [
+  { who: "system", t: "Lead arrives and is assigned", d: "From a Meta form or landing page. Qualent saves it, removes duplicates and assigns it. Tested locally at under half a second.",
+    wf: wf("Behind the scenes", "", `<div class="stack">${row("Omar Ali, Meta form, Marina villas", "just now")}${row("Same phone as an old lead?", tag("No"))}${row("Assigned to Dana", "reply timer starts")}</div>`) },
+  { who: "staff", t: "Alert on Telegram", d: "The group sees a masked phone and a link. The full number only shows after logging in.",
+    wf: wf("Telegram, team group", "", tg(["<strong>New lead</strong>", "<span>Omar Ali, +971•••567</span>", "<span>AI: hot</span>", "<span class='t'>qualent.app/leads/8f2a…</span>"])) },
+  { who: "staff", t: "Open the lead", d: "Everything needed for the call is at the top: phone, what they asked, which ad, and any AI summary. A Call button uses the phone's own dialer.",
+    wf: wf("Omar Ali", tag("Hot 91", "hot") + b("Call", 1), `<div class="stack"><span class="t">+971 50 123 4567 · New · Marina villas ad</span>${row("Asked", "Budget 2M, 2 bedrooms")}${row("AI summary", "Ready to view this week")}${row("Next step", "Call and offer a Friday viewing")}</div>`) },
+  { who: "staff", t: "Log the call in two clicks", d: "Tap the result, add a note if useful. This stops the reply timer and adds to the timeline.",
+    wf: wf("Log call", "", `<div class="btns">${b("Reached", 1)}${b("No answer")}${b("Wrong number")}${b("Call back")}</div><span class="field">Optional note…</span><div class="stack">${row("Today, 14:02 · Call, reached", "Dana")}${row("Today, 13:58 · Assigned", "Qualent")}${row("Today, 13:58 · Came from Marina villas", "Meta form")}</div>`) },
+  { who: "staff", t: "Draft a reply, if useful", d: "Ask for a WhatsApp draft, edit it, and copy it, or open it in WhatsApp. Qualent never sends anything itself. Hidden until an AI model is chosen.",
+    wf: wf("Reply draft", b("Copy") + b("Open WhatsApp", 1), `<div class="row">Hi Omar, thanks for your interest in the Marina villas. Are you free Friday for a viewing?</div>`) },
+  ],
+  refs: [m("screens/477e50d3-ba1c-4146-bce2-6b7282002ce5", "Salesforce lead page") + ": details beside a timeline, and a duplicate check card", m("screens/f274af69-fd06-401a-bafb-e105ad8a760a", "Zendesk Sell contact") + ": note box at the top of the timeline", m("screens/eafa74c2-8bfe-4729-8b1e-cde0ca455153", "Intercom inbox") + ": the summary sits beside the conversation"],
+  decide: "What should the phone show first after tapping the link: the lead, or a login? My default: login once, stay signed in for 30 days, then straight to the lead.",
+  status: ["Backend ready", "Login comes with the screens, once Supabase keys exist"] },
+
+{ id: "deliver", name: "Qualify and deliver", who: "7Gence staff", goal: "Staff decide a lead is good, then hand it to the client's sales agent on Telegram.",
+  steps: [
+  { who: "staff", t: "Mark the lead qualified", d: "Move it on the board or from the lead page. Qualent records it and tells Meta.",
+    wf: wf("Omar Ali", "", `<div class="btns">${tag("New")}${tag("Contacted")}${tag("Qualified", "hot")}${tag("Viewing")}${tag("Offer")}${tag("Won")}${tag("Lost")}</div>`) },
+  { who: "staff", t: "Pick the client's agent", d: "Qualent offers delivery straight after qualifying. Only agents who have linked Telegram can be picked.",
+    wf: wf("Send to client's agent", b("Send", 1), `<div class="stack">${row("Hassan K.", tag("Linked", "ok"), 1)}${row("Noura S.", tag("Linked", "ok"))}${row("Faisal R.", tag("Not linked", "warn"))}</div>`) },
+  { who: "system", t: "Delivered, with a timer", d: "The lead page shows who has it and when. If the agent does not respond in time, it moves to the next agent, then staff are told.",
+    wf: wf("Omar Ali", tag("Sent to Hassan", "ok"), `<div class="stack">${row("Waiting for Hassan", "47 min left")}</div>`) },
+  { who: "system", t: "If delivery fails", d: "If the agent blocked the bot, the lead shows a red banner and staff get an alert. A lead is never silently lost.",
+    wf: wf("Omar Ali", tag("Not delivered", "bad"), `<div class="row on"><span>Hassan has blocked the bot. Send to someone else.</span>${b("Choose agent")}</div>`) },
+  ],
+  refs: [m("screens/477e50d3-ba1c-4146-bce2-6b7282002ce5", "Salesforce lead page") + ": a status path across the top"],
+  decide: "Should qualifying always prompt delivery, or can staff skip it? My default: prompt with a Skip button, because some leads need another call first.",
+  status: ["Backend ready"] },
+
+{ id: "agent", name: "Client agent on Telegram", who: "Client's sales agent", goal: "The agent never logs in. Everything happens inside Telegram with one tap.",
+  steps: [
+  { who: "agent", t: "Link once", d: "Staff send a link. The agent taps it and presses Start.",
+    wf: wf("Telegram", "", tg(["<span>Linked. You will get leads here.</span>"])) },
+  { who: "agent", t: "Receive a lead", d: "A private message with the full phone number, what they asked, and buttons.",
+    wf: wf("Telegram, private", "", tg(["<strong>New lead: Omar Ali</strong>", "<span>Phone: +971 50 123 4567</span>", "<span>Asked: Budget 2M, 2 bedrooms</span>", "<span>Summary: Ready to view this week</span>"], "<span>Contacted</span><span>Viewing</span><span>Won</span><span>Lost</span>")) },
+  { who: "agent", t: "Tap what happened", d: "One tap updates the CRM, the reports and Meta. A small confirmation appears. Tapping again changes nothing.",
+    wf: wf("Telegram, private", "", tg(["<strong>New lead: Omar Ali</strong>", "<span class='t'>Updated: Viewing</span>"], "<span>Contacted</span><span class='on'>Viewing</span><span>Won</span><span>Lost</span>")) },
+  { who: "system", t: "The wrong person taps", d: "If someone else forwards the message and taps, nothing changes and they are told it is not theirs.",
+    wf: wf("Telegram", "", tg(["<span>This lead is not assigned to you.</span>"])) },
+  ],
+  refs: ["No Mobbin examples: this follows Telegram's own inline button pattern"],
+  decide: "Each pipeline chooses which stages appear as buttons. Four fit on one row. Is Contacted, Viewing, Won, Lost right for real estate? I've assumed yes.",
+  status: ["Backend ready", "Needs a bot token to run for real"] },
+
+{ id: "timer", name: "Nobody replied", who: "Automatic", goal: "What happens when a lead sits untouched. It moves on, and it can never loop forever.",
+  steps: [
+  { who: "system", t: "Reply timer runs out", d: "A call, a note or a Telegram tap would have stopped it. None came in 15 minutes.",
+    wf: wf("Omar Ali", tag("No reply", "warn"), `<div class="stack">${row("Assigned to Dana", "15 min ago")}</div>`) },
+  { who: "system", t: "Move to the next person", d: "The lead moves to the next person on duty. The team group sees it.",
+    wf: wf("Telegram, team group", "", tg(["<strong>No reply, reassigned</strong>", "<span>Omar Ali, +971•••567 → Omar</span>"])) },
+  { who: "system", t: "Stop at the manager", d: "After the set number of moves, it goes to the manager and stays there.",
+    wf: wf("Telegram, team group", "", tg(["<strong>No reply, escalated</strong>", "<span>Omar Ali, +971•••567 → Sara (manager)</span>"])) },
+  { who: "system", t: "Nobody on duty", d: "Outside working hours the lead waits in the inbox, the team is told once, and Qualent keeps checking until someone is on duty.",
+    wf: wf("New leads", "", `<div class="stack">${row("Omar Ali", tag("Waiting for 9:00", "warn"))}</div>`) },
+  ],
+  refs: ["No screens: this flow runs by itself and shows up through alerts and the timeline"],
+  decide: "On the free Vercel plan timers can run up to about a minute late. For a 15-minute timer that seems fine. Tell me if you promise clients anything tighter.",
+  status: ["Backend ready, tested locally", "The scheduler is not yet tested on real Supabase"] },
+
+{ id: "work", name: "A staff member's day", who: "7Gence staff", goal: "Where staff spend their time: what to do today, new leads, the board and the table.",
+  steps: [
+  { who: "staff", t: "Start on Today", d: "Overdue and due-today tasks, then hot leads. Everything is in the client's time zone. Staff switch clients from the top of the sidebar.",
+    wf: wf("Today", tag("Marina Homes ▾"), `<div class="stack">${row("Overdue · Call back Priya S.", tag("2 days", "bad"))}${row("Today · Send Omar the villa list", "16:00")}${row("Hot · Lina M.", tag("Hot 88", "hot"))}</div>`) },
+  { who: "staff", t: "Clear the new leads", d: "A table of unassigned leads with their source. Pick several and assign them at once.",
+    wf: wf("New leads", b("+ Lead", 1), `<table><tr><th>Name</th><th>Source</th><th>Campaign</th><th class="n">Waiting</th></tr><tr><td>Lina M.</td><td>Landing page</td><td>Downtown</td><td class="n">4 min</td></tr><tr><td>Rami A.</td><td>Typed in</td><td>WhatsApp, manual</td><td class="n">12 min</td></tr></table>`) },
+  { who: "staff", t: "Add a WhatsApp lead by hand", d: "A short form: name, phone, source, campaign. Saying it came from WhatsApp matters, because reports label it as manual. A quick form beats a long one here.",
+    wf: wf("Add lead", b("Save", 1), `<div class="stack"><span class="field">Rami Ahmed</span><span class="field">050 123 9876</span><div class="btns">${tag("WhatsApp", "hot")}${tag("Phone")}${tag("Walk-in")}</div><span class="field">Campaign: Downtown ▾</span></div>`) },
+  { who: "staff", t: "Work the board", d: "Drag a lead between stages, or use a Move to menu from the keyboard. Each card shows temperature and the next task. Won and Lost close the lead.",
+    wf: wf("Pipeline", b("Board", 1) + b("Table"), `<div class="cols"><div class="col"><span class="t">New 3</span><div class="cardlet">Lina M. ${tag("Hot", "hot")}</div></div><div class="col"><span class="t">Contacted 2</span><div class="cardlet">Omar A.</div></div><div class="col"><span class="t">Viewing 1</span><div class="cardlet">Priya S.</div></div><div class="col"><span class="t">Won 1</span><div class="cardlet">Rami A.</div></div></div>`) },
+  { who: "manager", t: "Filter and save a view", d: "Managers filter the table, save it as a view, and bulk-edit or export.",
+    wf: wf("Leads", b("Save view"), `<div class="btns">${tag("My hot leads", "hot")}${tag("Unassigned")}${tag("No reply 3 days")}</div><div class="btns">${tag("Temperature: Hot ×")}${tag("Stage: New ×")}${tag("+ Filter")}</div>`) },
+  { who: "staff", t: "Import a CSV", d: "Upload a file and see a clear result: what was created, what was a duplicate, and which rows failed and why.",
+    wf: wf("Import result", "", `<div class="stack">${row("Created", "212")}${row("Duplicates, added to existing", "31")}${row("Row 48: needs a phone or an email", tag("Failed", "bad"))}</div>`) },
+  ],
+  refs: [m("screens/45d9181e-ad36-4146-91ea-93ce49aef464", "Pipedrive leads inbox") + ": a table with source and next activity", m("flows/82eb7e3e-47a1-47c7-abb4-e133f5de31b4", "Attio deals") + ": a clean board, and an empty state offering CSV import", m("flows/3ddbc5ff-d328-4520-a8fb-8ddbcc3a721a", "Outseta pipeline") + ": a Board and List switch with owner and date filters", m("flows/435d26ec-f21c-4ec1-a4ac-0bfc05133641", "Zoho, creating a lead") + ": what to avoid, a 13-screen flow and a very long form"],
+  decide: "Should staff land on Today or on the board when they log in? My default: Today, because it answers “what do I do now?”",
+  status: ["Backend ready"] },
+
+{ id: "meta", name: "Results back to Meta", who: "Manager", goal: "Check that Meta is receiving results, and catch problems before the client does.",
+  steps: [
+  { who: "manager", t: "Check the stage mapping", d: "Every stage sends by default. Turning one off warns that Meta's lead optimization needs every stage.",
+    wf: wf("Send to Meta", "", `<div class="stack">${row("New", tag("On", "ok"))}${row("Qualified", tag("On", "ok"))}${row("Offer", tag("Off", "warn"), 1)}<span class="t">Meta needs every stage for form leads. Turning this off may stop optimization.</span></div>`) },
+  { who: "manager", t: "Send a test event", d: "Paste the test code from Meta's Events Manager and send one. Live events are never mixed in, and production refuses test codes.",
+    wf: wf("Test event", b("Send test", 1), `<span class="field">Test code: TEST12345</span>`) },
+  { who: "manager", t: "Read the health page", d: "Plain answers: are enough leads coming in, are events getting through, and when did the last one go?",
+    wf: wf("Meta health, last 30 days", "", `<div class="tiles"><div class="tile"><b>248</b><span class="t">Leads, need 200</span></div><div class="tile"><b>2.4%</b><span class="t">Won rate</span></div><div class="tile"><b>1,104</b><span class="t">Sent</span></div><div class="tile"><b>3</b><span class="t">Expired</span></div></div>`) },
+  { who: "system", t: "Something breaks", d: "A rejected token alerts the ops group straight away and marks the connection in setup.",
+    wf: wf("Telegram, ops", "", tg(["<strong>Meta rejected an event</strong>", "<span>Marina Homes: token expired</span>"])) },
+  ],
+  refs: [m("flows/18bed708-8e87-47ce-8aed-5d4df5a581b5", "Height, add an integration") + ": a problem shown right on the connection"],
+  decide: "Should clients ever see this page? My default: no, staff only. It is technical, and the client report covers results.",
+  status: ["Backend ready", "Needs Meta keys to run for real", "The test button comes with the screen"] },
+
+{ id: "automate", name: "Simple automations", who: "Manager", goal: "Follow-ups without manual work. Written as a sentence, not a diagram, since v1 only needs simple rules.",
+  steps: [
+  { who: "manager", t: "Read it as a sentence", d: "When something happens, then do these steps in order. Choices fill in the blanks.",
+    wf: wf("New rule", b("Turn on", 1), `<div class="sentence"><span class="t">When a lead enters</span>${tag("Viewing", "hot")}</div><div class="stack">${row("Then wait", "1 day")}${row("Then create task", "Ask how the viewing went")}${row("Then alert", "Team group")}</div><div class="sentence"><span class="t">Stop if the lead reaches</span>${tag("Won")}${tag("Lost")}</div>`) },
+  { who: "system", t: "Rules run themselves", d: "A lead enters a rule once. After each wait, Qualent checks again, so an old rule does nothing to a lead that has moved on.",
+    wf: wf("Omar Ali, timeline", "", `<div class="stack">${row("Task created by rule", "Ask how the viewing went")}${row("Waited 1 day", "")}${row("Entered rule", "Viewing follow-up")}</div>`) },
+  ],
+  refs: [m("screens/45f020cf-80c6-4d5e-9f4e-2974f661c0dd", "ClickUp automation") + ": the “When … then …” sentence I chose", m("screens/b1d64fe7-82a9-42dd-9487-6385ac347cc6", "Attio workflows") + " and " + m("screens/03600f8b-6fe6-4edb-b7c9-249581e95906", "Twenty workflows") + ": canvas builders, more than v1 needs"],
+  decide: "This is a sentence form rather than a drag-and-drop canvas. Your plan says rules only for v1, so I've kept to that.",
+  status: ["Backend ready"] },
+
+{ id: "portal", name: "Client report", who: "Client", goal: "The main sales tool: proof of results under the client's own brand. It shows numbers only, with no individual leads.",
+  steps: [
+  { who: "client", t: "Log in to a branded page", d: "The client's logo, colors and name. The address is Qualent's in v1.",
+    wf: wf("Marina Homes", b("Log in", 1), `<div class="stack"><span class="field">you@marinahomes.ae</span><span class="field">Password</span></div>`) },
+  { who: "client", t: "See the headline numbers", d: "One date range, with cost per qualified lead as the star, since that is what sets this report apart.",
+    wf: wf("Last 30 days", tag("1–30 Oct ▾"), `<div class="tiles"><div class="tile"><b>12,400</b><span class="t">Spend, AED</span></div><div class="tile"><b>248</b><span class="t">Leads</span></div><div class="tile"><b style="color:var(--accent)">200</b><span class="t">Per qualified</span></div><div class="tile"><b>6</b><span class="t">Deals</span></div></div>`) },
+  { who: "client", t: "Compare campaigns", d: "Here both campaigns cost AED 50 a lead, but one costs half as much per qualified lead. Reports on leads alone would miss that.",
+    wf: wf("By campaign", b("Export"), `<table><tr><th>Campaign</th><th class="n">Spend</th><th class="n">Leads</th><th class="n">Per lead</th><th class="n">Per qualified</th><th class="n">Deals</th></tr><tr><td>Marina villas</td><td class="n">8,200</td><td class="n">164</td><td class="n">50</td><td class="n key">167</td><td class="n">5</td></tr><tr><td>Downtown flats</td><td class="n">4,200</td><td class="n">84</td><td class="n">50</td><td class="n key">323</td><td class="n">1</td></tr><tr><td>Manual entries</td><td class="n">—</td><td class="n">9</td><td class="n">—</td><td class="n">—</td><td class="n">1</td></tr></table>`) },
+  { who: "staff", t: "Staff approve the weekly analysis", d: "When AI is switched on, a draft appears for staff. Clients only see what staff approve.",
+    wf: wf("Weekly analysis", tag("Draft", "warn") + b("Approve", 1), `<div class="row">Move budget from Downtown flats to Marina villas: same cost per lead, half the cost per qualified lead.</div>`) },
+  ],
+  refs: [m("screens/c7973aa1-770a-4341-b8bc-94ac75d36669", "Reddit Ads") + ": metric tiles above a campaign table with totals", m("screens/25a39159-97db-439c-a703-91b66ac3aa53", "Pinterest Ads") + " and " + m("screens/c628c4db-eb11-468b-9dca-4565c8fc9817", "Google Ads") + ": simplified heavily, since clients are not ad specialists"],
+  decide: "Should clients see the “Manual entries” row? My default: yes, labeled, so the totals are honest. It also shows why WhatsApp leads are not tied to a campaign.",
+  status: ["Backend ready for reports", "Login and brand colors come with the screens"] },
+
+{ id: "privacy", name: "Export or erase a person", who: "Manager", goal: "When someone asks what we hold on them, or asks to be removed.",
+  steps: [
+  { who: "manager", t: "Find the contact", d: "Search by phone or email. Both actions live on the contact, away from everyday work.",
+    wf: wf("Omar Ali, privacy", b("Export") + b("Erase"), `<div class="stack">${row("Consent", "Meta form, 12 Oct")}${row("Leads", "1")}</div>`) },
+  { who: "manager", t: "Confirm the erase", d: "It cannot be undone, so it asks the manager to type the word and states exactly what stays.",
+    wf: wf("Erase this person?", b("Erase", 1), `<div class="stack"><span class="t">Removes name, phone, email, notes and tracking data. Reports keep anonymous counts.</span><span class="field">Type ERASE to confirm</span></div>`) },
+  { who: "system", t: "Done everywhere", d: "Also clears raw webhook copies and cancels queued Meta events. The audit log records who did it, with no personal details.",
+    wf: wf("Audit log", "", `<div class="stack">${row("Sara erased a contact", "Today, 11:20")}</div>`) },
+  ],
+  refs: [m("flows/71af99f1-da65-40d7-9ded-20a2ebbcc6c0", "Attio settings") + ": grouped settings pages, keeping rare actions out of daily work"],
+  decide: "Who can erase: only managers, as I've assumed, or staff too?",
+  status: ["Backend ready, tested locally"] },
+];
+
+const picker = document.getElementById("picker");
+const main = document.getElementById("flows");
+
+picker.innerHTML = FLOWS.map((f, i) => `<a href="#${f.id}" data-id="${f.id}"><span class="n">${i + 1}</span>${f.name}</a>`).join("");
+
+main.innerHTML = FLOWS.map((f, i) => `
+  <section class="flow" id="flow-${f.id}" hidden aria-labelledby="h-${f.id}">
+    <div class="flow-head">
+      <p class="label">Flow ${i + 1} of ${FLOWS.length} · ${f.who}</p>
+      <h2 id="h-${f.id}">${f.name}</h2>
+      <p>${f.goal}</p>
+    </div>
+    <ol class="steps">
+      ${f.steps.map((s, n) => `<li class="step">
+        <span class="num">${n + 1}</span>
+        <div class="step-text"><span class="who ${s.who}">${{ staff: "Staff", manager: "Manager", agent: "Client's agent", client: "Client", system: "Qualent" }[s.who]}</span><h3>${s.t}</h3><p>${s.d}</p></div>
+        ${s.wf}
+      </li>`).join("")}
+    </ol>
+    <div class="notes">
+      <div class="decide"><p class="label">Your call</p><p>${f.decide}</p></div>
+      <div><p class="label">Learned from Mobbin</p><ul>${f.refs.map((r) => `<li>${r}</li>`).join("")}</ul></div>
+      <div><p class="label">Backend today</p><ul>${f.status.map((s) => `<li>${s}</li>`).join("")}</ul></div>
+    </div>
+  </section>`).join("");
+
+function show() {
+  const wanted = location.hash.slice(1);
+  const id = FLOWS.some((f) => f.id === wanted) ? wanted : FLOWS[0].id;
+  FLOWS.forEach((f) => { document.getElementById(`flow-${f.id}`).hidden = f.id !== id; });
+  picker.querySelectorAll("a").forEach((a) => a.setAttribute("aria-current", String(a.dataset.id === id)));
+}
+addEventListener("hashchange", show);
+show();
+</script>

@@ -35,5 +35,6 @@ Legend: [x] done · [~] in progress · [ ] not started · [!] waiting on you
 - [ ] Supabase Auth session wiring (with the login screens)
 
 ## Frontend
-- [~] Flows as artifacts, using Mobbin  ← next
+- [x] Flows as an artifact, using Mobbin (docs/flows.html)
+- [!] Approve the flows and answer the "Your call" questions  ← WAITING ON YOU
 - [ ] Screens, after you approve the flows
