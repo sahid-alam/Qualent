@@ -11,7 +11,7 @@ import { tenants, type AutomationStep } from "../../../lib/db/schema.ts";
 import { localToUtc } from "../../../lib/time.ts";
 import { saveConnection } from "../../../lib/intake/meta.ts";
 import { ingestLead, InvalidLeadError } from "../../../lib/leads/ingest.ts";
-import { bulkUpdateLeads, changeStage, completeTask, createNote, createTask, importCsv, logCall, saveView, setCustomFields } from "../../../lib/leads/work.ts";
+import { bulkUpdateLeads, changeStage, completeTask, createNote, createTask, getTask, importCsv, logCall, saveView, setCustomFields } from "../../../lib/leads/work.ts";
 import { eraseContact } from "../../../lib/privacy.ts";
 import { deliverLead } from "../../../lib/routing.ts";
 import {
@@ -104,8 +104,11 @@ export const addTaskAction = action("leads.write", z.object({ leadId, title: req
   return "Task added.";
 });
 
-export const completeTaskAction = action("leads.write", z.object({ taskId: z.uuid() }), async (data, { actor }) => {
-  await completeTask(data.tenantId, data.taskId, actor);
+export const completeTaskAction = action("leads.write", z.object({ taskId: z.uuid() }), async (data, context) => {
+  const task = await getTask(data.tenantId, data.taskId);
+  if (!task) throw new UserError("This task isn't available to you.");
+  await requireLeadAccess(data.tenantId, task.leadId, context);
+  await completeTask(data.tenantId, data.taskId, context.actor);
   return "Done.";
 });
 

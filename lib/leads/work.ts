@@ -54,6 +54,10 @@ export function createTask(
   return withTenant(tenantId, (db) => db.insert(tasks).values({ tenantId, ...input }).returning().then(([row]) => row), actor);
 }
 
+export function getTask(tenantId: string, taskId: string) {
+  return withTenant(tenantId, (db) => db.select().from(tasks).where(eq(tasks.id, taskId)).then(([row]) => row));
+}
+
 export function completeTask(tenantId: string, taskId: string, actor: string) {
   return withTenant(tenantId, (db) => db.update(tasks).set({ doneAt: sql`now()` }).where(eq(tasks.id, taskId)), actor);
 }

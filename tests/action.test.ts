@@ -1,5 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
+import { ingestLead } from "../lib/leads/ingest.ts";
+import { createTask, getTask } from "../lib/leads/work.ts";
 import { addMember, newTenant } from "./helpers.ts";
 
 const session = vi.hoisted(() => ({ userId: "" }));
@@ -9,6 +11,7 @@ vi.mock("next/navigation", () => ({ unstable_rethrow: vi.fn(), redirect: vi.fn()
 vi.mock("../lib/auth/session.ts", () => ({ requireUserId: async () => session.userId }));
 
 const { action, UserError } = await import("../lib/auth/action.ts");
+const { completeTaskAction } = await import("../app/c/[tenantId]/actions.ts");
 
 const form = (values: Record<string, string | string[]>) => {
   const data = new FormData();
@@ -80,4 +83,20 @@ test("ticked boxes arrive as a list, even when there is only one", async () => {
   await lists(null, form({ tenantId: id, "ids[]": "a" }));
   await lists(null, form({ tenantId: id, "ids[]": ["a", "b"] }));
   expect(seen).toEqual([["a"], ["a", "b"]]);
+});
+
+test("an assigned-only agent cannot complete a task on someone else's lead", async () => {
+  const { id } = await newTenant();
+  const { leadId } = await ingestLead(id, { source: "manual", email: "scoped@example.com" });
+  const task = await createTask(id, { leadId, title: "Call", dueAt: new Date() }, "t");
+
+  session.userId = crypto.randomUUID();
+  await addMember(id, { userId: session.userId, role: "agent", recordScope: "assigned" });
+  expect((await completeTaskAction(null, form({ tenantId: id, taskId: task.id }))).error).toBe("This lead isn't available to you.");
+  expect((await getTask(id, task.id)).doneAt).toBeNull();
+
+  session.userId = crypto.randomUUID();
+  await addMember(id, { userId: session.userId, role: "agent", recordScope: "all" });
+  expect((await completeTaskAction(null, form({ tenantId: id, taskId: task.id }))).ok).toBe("Done.");
+  expect((await getTask(id, task.id)).doneAt).toBeInstanceOf(Date);
 });
