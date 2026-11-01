@@ -8,7 +8,7 @@ Read first: [docs/ROADMAP.md](docs/ROADMAP.md) for the next task, [docs/ARCHITEC
 
 ## Stack
 
-Next.js 16, React 19, TypeScript, Tailwind 4, shadcn/ui, TanStack Table and Query, dnd-kit, react-hook-form, zod, Recharts, lucide-react. Supabase Postgres and Auth, Drizzle ORM, pg-boss, libphonenumber-js, Sentry. Vercel in Mumbai (`bom1`): `web` as Functions, `worker` as a Daemon (public beta). AI: Gemma 4 through Ollama for lead work, Kimi for ad numbers.
+Next.js 16, React 19, TypeScript, Tailwind 4, shadcn/ui, TanStack Table and Query, dnd-kit, react-hook-form, zod, Recharts, lucide-react. Supabase Postgres and Auth, Drizzle ORM, pg-boss, libphonenumber-js, Sentry. Vercel Hobby in Mumbai (`bom1`), with no always-on worker: webhooks process right away with `after()`, and Supabase's scheduler calls `/api/cron/tick` when jobs are due. AI model not chosen yet.
 
 ## Folders
 
@@ -16,16 +16,23 @@ Next.js 16, React 19, TypeScript, Tailwind 4, shadcn/ui, TanStack Table and Quer
 app/(workspace)/    7Gence staff screens
 app/(portal)/       Client Portal, reports only
 app/api/            Webhooks and intake routes
-worker/             pg-boss job handlers
+worker/             Local job loop
 lib/db/             Drizzle schema, withTenant()
-lib/leads/          ingestLead(), routing
-lib/meta/           Lead fetch, CAPI sender, spend sync
-lib/telegram/       Bot, queue
-lib/ai/             ai.run(), model router, budget
+lib/jobs/           Queues, drain(), tick(), job handlers
+lib/leads/          ingestLead(), moveStage(), lead work
+lib/intake/         Meta and landing page intake
+lib/capi/           Meta event sender
+lib/telegram/       Bot, alerts, delivery, buttons
+lib/ai/             aiRun(), redaction, tasks
+lib/routing.ts      Assignment and reply timers
+lib/automation.ts   Rules
+lib/reports.ts      Spend sync, client and team reports
+lib/privacy.ts      Export, erase, retention
 components/         Shared UI
 design/             theme.css, tokens.json
 drizzle/            Migrations
-tests/              Isolation and end-to-end tests
+supabase/cron.sql   Scheduler, run once per environment
+tests/              Run as app_user on a real Postgres
 ```
 
 ## Commands
@@ -39,7 +46,7 @@ npm run typecheck
 npm run check:licenses
 npm run check:css    # no physical CSS classes
 npm run db:generate  # create a migration from lib/db/schema.ts
-npm run db:migrate   # needs MIGRATE_DATABASE_URL
+npm run db:migrate   # migrations, job queues, grants; needs MIGRATE_DATABASE_URL
 ```
 
 Before calling a task done, run `npm run lint && npm run typecheck && npm test`, and meet its "Done when" in the roadmap.
@@ -51,11 +58,13 @@ The worker runs on Node's built-in TypeScript support with no build step, so `li
 - **All data access goes through `withTenant()`**, including in the worker. Never connect with a role that bypasses row-level security.
 - Every new tenant table has `tenant_id`, forced row-level security and composite foreign keys. The isolation test must pass.
 - The browser never talks to the database.
-- Webhooks verify signatures, save to `webhook_inbox`, queue a job, and reply. No processing in the request.
+- Webhooks verify signatures, save to `webhook_inbox`, queue a job, and reply. Process after the response with `after()`, never before it.
+- A new tenant table gets its policy in a migration. `tests/isolation.test.ts` fails if row-level security is off on any public table.
+- Drizzle wraps database errors, so read `error.cause` for the real message.
 - Jobs must be safe to run twice.
 - Queue jobs in the same transaction as the data change.
 - Validate input with zod at every boundary. Lead text is untrusted, including when passed to AI.
-- All AI calls go through `ai.run()`. Lead data only reaches `no_training` models.
+- All AI calls go through `aiRun()`. Lead data only reaches `no_training` models.
 - Times are `timestamptz` in UTC, money is `numeric` plus currency, phones are E.164.
 - Logs never contain phone numbers, emails or message text.
 - Before writing Next.js code, check the guide for this exact version in `node_modules/next/dist/docs/`. `next dev` creates `AGENTS.md` to say the same; keep it.

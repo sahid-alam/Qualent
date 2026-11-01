@@ -12,9 +12,9 @@ Start now, alongside M1. None of these need code.
 |---|---|---|
 | 0.1 | Start Meta Business Verification | Verified status shows in Business Manager |
 | 0.2 | ~~Confirm rights to reuse the ROI-Maxi design~~ | Done 2026-11-01: it is the owner's own design |
-| 0.3 | Ask UAE counsel about PDPL, hosting in India, and lead data reaching Ollama Cloud | Written opinion on file, and any change raised with the team |
+| 0.3 | Ask UAE counsel about PDPL and hosting in India | Written opinion on file, and any change raised with the team |
 | 0.4 | Check trademark and domain for "Qualent" | Trademark checked and a domain bought (`qualent.com` is taken) |
-| 0.5 | Create Vercel Pro, Supabase, Ollama, Kimi and Sentry accounts | Keys stored in a password manager, not in chat or the repo |
+| 0.5 | Create Vercel, Supabase and Sentry accounts, a Telegram bot, and a Meta app | Keys stored in a password manager, not in chat or the repo |
 | 0.6 | Check each pilot client's ad mix | List shows how much spend runs on Click-to-WhatsApp ads |
 
 ## M1: Foundation
@@ -26,12 +26,12 @@ Goal: an empty app runs in Mumbai and the risky hosting assumptions are tested.
 | 1.1 | Git repo, Next.js 16, TypeScript, Tailwind 4, `design/theme.css` | `npm run dev` shows a themed page in light and dark |
 | 1.2 | CI: lint, types, tests, license check, physical-CSS lint | A failing test or banned license blocks merge |
 | 1.3 | Staging and production Supabase projects in Mumbai; Drizzle migrations through a separate role | `npm run db:migrate` works from CI on both |
-| 1.4 | Staging and production Vercel projects: `web` in `bom1`, `worker` as a Daemon | Both run, and the worker restarts after a crash |
-| 1.5 | Confirm Daemons run in `bom1`, or move the worker to Cloud Run | Result recorded in ADR-0004 |
-| 1.6 | pg-boss running, with a test delayed job | A job queued from `web` runs in `worker` after its delay, surviving a worker restart |
+| 1.4 | Vercel project in `bom1` on the Hobby plan | The app runs, and all routes respond |
+| 1.5 | Run `supabase/cron.sql` | Due jobs run within about a minute, and the health check stays green |
+| 1.6 | pg-boss with delayed jobs, run on demand | A delayed job waits, then runs, and queued jobs survive a crash |
 | 1.7 | Measure the database round trip and test the connection poolers | Numbers recorded in ADR-0004; `SET LOCAL` confirmed on the transaction pooler |
 | 1.8 | Sentry, with personal data scrubbed, and an external uptime check | A test error appears in Sentry with no personal data |
-| 1.9 | Worker heartbeat and `/api/health` | Health fails when the worker is stopped for 2 minutes, and recovers when it restarts |
+| 1.9 | Heartbeat and `/api/health` | Health fails when ticks stop for 20 minutes, and recovers on the next tick |
 
 ## M2: Tenancy and security
 
@@ -121,12 +121,12 @@ Goal: results reach Meta correctly.
 
 | # | Task | Done when |
 |---|---|---|
-| 8.1 | `ai.run()`, `ai_models`, Gemma 4 on local Ollama through the adapter (FR-41) | A schema-checked result returns; a model swap needs only a config change |
-| 8.2 | Read Ollama Cloud's terms and confirm its Gemma price; test `gemma4:cloud` with fake data | Terms and price recorded in ADR-0007; same adapter works |
+| 8.1 | `aiRun()`, `ai_models`, and the OpenAI-format adapter (FR-41) | A schema-checked result returns; a model swap needs only a config change |
+| 8.2 | Choose the model and read its terms | Choice, terms and price recorded in ADR-0007 |
 | 8.3 | No-training routing (FR-41) | A test proves lead tasks refuse a `no_training = false` model |
 | 8.4 | Placeholder replacement (FR-43) | Tests cover names, phones and emails, including Arabic text |
 | 8.5 | Budget ledger and stop (FR-42) | Warns at 80%; stops at 100%; leads still flow and show as unscored |
-| 8.6 | AI test set, including Arabic and JSON reliability | Gemma passes, or we fall back to Gemini and record why |
+| 8.6 | AI test set, including Arabic and JSON reliability | The chosen model passes, or we pick another and record why |
 | 8.7 | Score, summary and next step (FR-36 to FR-38) | Output appears on the lead; slow AI does not delay alerts |
 | 8.8 | Reply drafts (FR-39) | Copy works; nothing can be sent automatically |
 | 8.9 | Prompt-injection test | A lead message containing instructions cannot change anything beyond schema fields |

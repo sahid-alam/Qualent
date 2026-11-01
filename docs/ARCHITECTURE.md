@@ -16,7 +16,7 @@ Evidence labels: **[Official]** vendor docs read directly. **[Secondary]** third
 | 5a: agents contact leads outside the CRM | The CRM **never sends messages to leads in v1**. In-CRM WhatsApp sending (5b) and SMS/email (5c) come later. |
 | 6a + 6c: all stages go to Meta, each client can change it | Every stage is on by default, with a per-client override set by 7Gence staff. Meta's rules limit this; see section 7. |
 | 7a–e: all five AI features | All are in v1, as suggestions only. AI never sends anything by itself. "Call summaries" means summaries of staff notes, including chat text pasted into a note, because v1 records no calls and has no WhatsApp connection. |
-| 8a: cheap model plus Kimi for hard jobs | Gemma 4 through Ollama for routine work, Kimi K3.1 Pro for ad analysis on numbers only. See section 9. |
+| 8a: cheap model plus Kimi for hard jobs | Model choice is open. See section 9. |
 | 9a: English only | English screens only. No Arabic fonts or right-to-left testing in v1. CSS logical properties stay, because they cost nothing. Leads may still write in Arabic: we store it correctly and AI summarizes it in English. |
 | 10a: logo, colors, name | Per-client branding in the portal. Custom domains are Later. |
 
@@ -25,8 +25,8 @@ Evidence labels: **[Official]** vendor docs read directly. **[Secondary]** third
 | # | Decision | What it means |
 |---|---|---|
 | 1a | **Telegram result buttons** | Each delivered lead has buttons such as Contacted, Viewing, Won, Lost. One tap updates the CRM, so the reassign rule works for client agents and Meta receives late-stage signals. |
-| 2b | **Mumbai hosting, on Vercel for now** | Supabase Mumbai plus Vercel Mumbai, with the worker on Vercel Daemons. See section 12. |
-| 3 | **Gemma through Ollama for lead work, Kimi for ad numbers** | The model is free, but running it is not. See section 9. |
+| 2b | **Mumbai hosting, on Vercel's free plan for v1** | Supabase Mumbai plus Vercel Mumbai, with jobs run on demand. See sections 12 and 13. |
+| 3 | **AI model decided later** | The backend works with no model: leads stay unscored. See section 9. |
 | 4b | **No WhatsApp in v1** | Click-to-WhatsApp ads cannot be attributed automatically or optimized through the CRM in v1. See section 6.2. |
 
 ## 2. System overview
@@ -98,7 +98,7 @@ Main flow:
 | DB access | Drizzle ORM (Apache-2.0) from the server only | Real transactions. The browser never talks to the database. |
 | Auth | Supabase Auth | Already in the platform. MFA required for staff. |
 | Jobs | **pg-boss** (MIT) on the same Postgres | No Redis, no extra service. Delayed jobs give us "wait N minutes". |
-| Hosting | **Vercel in Mumbai** (`bom1`): the Next.js app as `web`, plus a `worker` on Vercel Daemons | Your decision. Same platform for both, with a Docker worker that can move. Risks are in section 12. |
+| Hosting | **Vercel Hobby in Mumbai** (`bom1`), with jobs run on demand and no always-on worker | Your decision for v1. Limits are in section 12, and the job design is in section 13. |
 | Phone numbers | libphonenumber-js (MIT) | Standard E.164 parsing. |
 | Monitoring | Sentry, plus internal health page and Telegram ops alerts | See section 13. |
 
@@ -296,16 +296,16 @@ ai.run({ tenantId, task: "score_lead", input, schema }) // → { data, usage, co
 
 Ollama, Kimi, DeepSeek, OpenRouter and Gemini all offer OpenAI-format endpoints ([Official] for Ollama, Kimi and DeepSeek; Gemini [UNVERIFIED]), so **one adapter plus an `ai_models` config row** covers them. Swapping a model is a config change. A provider with a different format gets a second adapter then, not now.
 
-**Models (your decision):**
+**Models: not decided yet (your decision).** With no `ai_models` row, leads flow normally and stay unscored. Candidates:
 
-| Tier | Model | Price per 1M tokens (in/out) | Used for |
-|---|---|---|---|
-| Routine | Gemma 4 through Ollama (Apache 2.0 [Secondary]) | See "Where Gemma runs" | Scoring, summaries, next step, reply drafts |
-| Hard | `kimi-k3.1-pro`, `reasoning_effort: low` | ~$2 / $10 [UNVERIFIED, one source]; K3 is $3 / $15 [Secondary] | Weekly ad performance analysis |
-| Swap option | `gemini-3.1-flash-lite` | $0.25 / $1.50; batch $0.125 / $0.75 [Official] | Fallback if Gemma fails the test set |
-| Swap option | `deepseek-flash` | $0.30 / $1.20 peak, half off-peak [Official] | Not used for lead data until its privacy terms are checked |
+| Model | Price per 1M tokens (in/out) | Notes |
+|---|---|---|
+| Gemma 4 through Ollama (Apache 2.0 [Secondary]) | See "Where Gemma would run" | The direction you leaned towards |
+| `kimi-k3.1-pro`, `reasoning_effort: low` | ~$2 / $10 [UNVERIFIED, one source]; K3 is $3 / $15 [Secondary] | Ad numbers only, because of its privacy terms |
+| `gemini-3.1-flash-lite` | $0.25 / $1.50; batch $0.125 / $0.75 [Official] | Paid tier says no product training |
+| `deepseek-flash` | $0.30 / $1.20 peak, half off-peak [Official] | Not for lead data until its privacy terms are checked |
 
-**Where Gemma runs.** The model is free, but it needs a machine, and Vercel cannot host it. Token counts below are my estimate of 2,000 in and 300 out per call.
+**Where Gemma would run.** The model is free, but it needs a machine, and Vercel cannot host it. Token counts below are my estimate of 2,000 in and 300 out per call.
 
 | Where | Cost | Speed | Lead data | Use |
 |---|---|---|---|---|
@@ -314,11 +314,9 @@ Ollama, Kimi, DeepSeek, OpenRouter and Gemini all offer OpenAI-format endpoints 
 | Own CPU server, Mumbai | About $155 a month for 4 vCPU and 16 GB (half of `m7i.2xlarge`'s $310; estimate from [Secondary]) | About 45–300 seconds per scoring call at 1–7 tokens a second | Stays on our server | If a contract forbids outside AI. Slow but workable for scoring, which runs in the background; poor for reply drafts |
 | Own GPU server, Mumbai | About $423 a month [Secondary] | Fast | Stays on our server | If volume or speed needs it |
 
-**Decision:** build against local Ollama, then run production on Ollama Cloud. All three use the same adapter with a different `base_url`, so switching is a config change. Before real lead data goes to Ollama Cloud, we read its terms, add it to the sub-processor list, and have counsel cover the US transfer. It stays `no_training = false` until then.
+All of these use the same adapter with a different `base_url`, so switching is a config change. Before real lead data goes to Ollama Cloud, we would read its terms, add it to the sub-processor list, and have counsel cover the US transfer. It stays `no_training = false` until then.
 
-**Switch to our own server if:** a client contract forbids outside AI, or monthly Ollama Cloud spend passes about $155.
-
-**Gemma is unproven for this job.** No source covers its Arabic quality or JSON reliability, so the test set below decides. If it fails, we use the Gemini row.
+**Gemma is unproven for this job.** No source covers its Arabic quality or JSON reliability, so the test set below decides.
 
 Ollama setup notes:
 - A local server has no login [Official], so any self-hosted server sits behind an HTTPS proxy that checks a secret token. Vercel has no cheap private link to it.
@@ -379,24 +377,17 @@ Limit: the portal URL is ours in v1 (for example `portal.<product>.com/<client>`
 
 ## 12. Regions and compliance
 
-### Hosting: Mumbai on Vercel, for now (your decisions)
+### Hosting: Mumbai on free plans, for v1 (your decisions)
 
-**Setup:** Supabase Mumbai (`ap-south-1`) [Official] plus Vercel Mumbai (`bom1`) [Official].
+**Setup:** Supabase Mumbai (`ap-south-1`) [Official] plus Vercel Hobby in Mumbai (`bom1`) [Official].
 
-| Part | How it runs |
-|---|---|
-| `web` | Next.js on Vercel Functions in `bom1` |
-| `worker` | A Vercel Daemon: an always-on Docker container with `instances: { "bom1": 1 }`, restarted automatically if it crashes [Official] |
+**Free plan limits, and what they force [Official]:**
+- **Vercel Hobby is non-commercial only.** Move to Pro ($20 a seat a month) before the first paying client, or accept the risk of the account being paused.
+- **No always-on worker.** A Hobby daemon gets 420 GB-hours a month, so even 1 GB stops after about 17 days. Hobby cron runs once a day. So jobs run on demand; see section 13.
+- **4 hours of Active CPU, 360 GB-hours of memory, 1 million invocations a month.** Going over means waiting up to 30 days, so usage needs watching.
+- **Supabase free:** 500 MB per project, and projects pause after 7 days of low activity. No point-in-time recovery.
 
-**Plan and cost [Official]:** Pro is required, because Hobby is non-commercial. Pro is $20 per developer seat a month with $20 of usage included. In `bom1`, a 1 GiB worker costs about $8.50 a month for memory ($0.0116 per GB-hour), plus $0.14 per hour of active CPU.
-
-**Risks of Daemons, which you accepted "for now":**
-- **Public beta since 2026-10-15.** Limits may change, and we should not expect an uptime promise.
-- **Production only.** Preview deployments have no worker, so staging is its own Vercel project.
-- **Mumbai is not explicitly confirmed.** Instance counts are keyed by region ID, and `bom1` is a listed region, but no page names it for Daemons. Test this in M1.
-- **What protects us:** jobs live in Postgres, so a worker outage delays alerts rather than losing leads. The worker is a plain Docker image, so it can move to Cloud Run in Mumbai (`asia-south1` [Official]) without code changes. A health check alerts if the worker stops.
-
-**Check in M1 [UNVERIFIED]:** the daemon starts in `bom1`, the build works with our shared code (the Dockerfile's folder is the build context [Official], so it sits at the repo root), and the database round trip is acceptable.
+**Check when creating the projects [UNVERIFIED]:** Mumbai on Supabase's free plan, whether scheduled jobs count as activity, and the database round trip.
 
 **Why Mumbai:** the only speed figures found are old or vendor-supplied, but they agree it is much closer. Dubai to Mumbai about 27 ms versus Dubai to Frankfurt about 92–131 ms [Secondary].
 
@@ -406,7 +397,8 @@ Limit: the portal URL is ours in v1 (for example `portal.<product>.com/<client>`
 |---|---|
 | Railway | No India region: California, Virginia, Amsterdam, Singapore only [Official] |
 | Fly.io | Mumbai is on its deprecated-region list and missing from its current docs [Official] |
-| Google Cloud Run | Mature and has Mumbai, but more setup. **The fallback if Daemons fail us.** |
+| Google Cloud Run | Mature and has Mumbai, but more setup. A later option for an always-on worker. |
+| Vercel Pro with Daemons | Daemons are in public beta, and Pro costs money. The likely next step when the first client pays. |
 | AWS App Runner | Closed to new customers since 2026-04-30 [Official] |
 | DigitalOcean | Bangalore, a different city from the database |
 | UAE on Azure | Data stays in the UAE, but far more operations work and cost |
@@ -443,7 +435,14 @@ Meta spend reports in the ad account's time zone and currency. Onboarding checks
 
 ## 13. Jobs, scaling, monitoring, backups
 
-**Queues (pg-boss), each with its own concurrency:** `intake`, `routing_timers`, `automation`, `capi`, `telegram`, `ai`, `spend_sync` (daily plus an intraday refresh), `meta_poll` (every 15 minutes), `retention`. Failed jobs retry with backoff and then go to a dead-letter queue shown on the health page.
+**How jobs run on the free plan.** There is no always-on worker:
+1. A webhook saves the event, queues a job, replies, and then runs the fast queues right away using `after()`. This is what keeps alerts quick.
+2. Every minute, Supabase's scheduler checks inside Postgres whether a job is due, and calls `/api/cron/tick` only if so. Delayed jobs such as reply timers therefore run up to about a minute late.
+3. Every 15 minutes it calls regardless, for the heartbeat and periodic work.
+
+Because the check happens in Postgres, an idle system costs almost no Vercel usage. `npm run worker` runs the same code in a loop, for local development or a future always-on host. See [ADR-0005](adr/0005-jobs-pg-boss-and-inbox.md).
+
+**Queues (pg-boss), in priority order:** `intake`, `routing`, `telegram`, `capi`, `automation`, `meta` (poll every 15 minutes, spend every 6 hours), `ai`, `maintenance`. Failed jobs retry with backoff and then go to a dead-letter queue.
 
 Jobs are added inside the same database transaction as the data change, so we never get a stage change without its Meta event.
 
@@ -452,20 +451,20 @@ Jobs are added inside the same database transaction as the data change, so we ne
 2. Larger Postgres plan, and indexes led by `tenant_id`.
 3. Rollup tables if a report takes over 1 second.
 4. A read replica for reports.
-5. Move queues to BullMQ with Redis if pg-boss becomes the bottleneck. **Ceiling:** pg-boss adds load on the main database. `web` uses Supabase's transaction pooler. The long-lived worker uses the session pooler or a direct connection, not the transaction pooler [UNVERIFIED; test early].
+5. Move queues to BullMQ with Redis if pg-boss becomes the bottleneck. **Ceiling:** pg-boss adds load on the main database. All app code uses Supabase's transaction pooler [UNVERIFIED with pg-boss; test early].
 
 **Monitoring:**
 - Sentry for errors, without personal data.
-- External uptime checks on web and webhook routes. The worker has no URL, so it writes a heartbeat row every minute and `/api/health` fails if the row is stale.
+- External uptime checks on web and webhook routes. Each scheduled tick writes a heartbeat row, and `/api/health` fails if it is over 20 minutes old.
 - Internal health page: webhook-to-alert time, queue depth, dead letters, Meta events failed or expired, Telegram failures, AI spend, and token expiry per connection.
 - Critical alerts go to a 7Gence ops Telegram group.
 
 **Backups:**
-- Supabase point-in-time recovery, plus a nightly encrypted `pg_dump` to separate object storage in another Indian city (AWS Hyderabad, `ap-south-2` [UNVERIFIED]), under its own account. That gives a different city and the same country, because March 2026 showed one region is not enough.
+- **On free plans there is no point-in-time recovery and backups are unconfirmed, so a nightly dump matters more until we upgrade.** The target is Supabase point-in-time recovery, plus a nightly encrypted `pg_dump` to separate object storage in another Indian city (AWS Hyderabad, `ap-south-2` [UNVERIFIED]), under its own account. That gives a different city and the same country, because March 2026 showed one region is not enough.
 - Targets (proposal): at most 5 minutes of data lost, restored within 4 hours.
 - A restore drill every quarter. A backup that has never been restored does not count.
 
-**Environments:** local, staging (with Meta test events only) and production. Daemons only run in a Vercel project's production environment [Official], so staging is a second Vercel project with its own Supabase project. Migrations run in CI through a separate database role.
+**Environments:** local, staging (with Meta test events only) and production, each with its own Supabase project. Supabase's free plan allows two. Migrations run through a separate database role.
 
 ## 14. Reuse versus build
 
@@ -491,10 +490,9 @@ Jobs are added inside the same database transaction as the data change, so we ne
 | 3 | Clients ignore Telegram buttons, so late-stage data is thin | Measure per client on the health page. Staff follow up. |
 | 4 | Low-volume clients never reach 200 leads a month | Health check explains this honestly. Reports still work. |
 | 5 | PDPL rules or a contract require UAE hosting, or counsel objects to India | Tenant export plus a UAE deployment or a move, per section 12. Get counsel's view before signing the first client. |
-| 6 | Vercel Daemons change or fail during beta | Jobs wait safely in Postgres, a heartbeat alert fires, and the same image moves to Cloud Run. |
+| 6 | Free plan limits: Vercel's non-commercial terms, or a usage limit pausing the app for up to 30 days | Upgrade before the first paying client, and watch usage. |
 | 7 | AI prices or models change again, as Kimi's just did | Config-only swap, test set, price table. |
-| 8 | Gemma scores poorly, especially on Arabic | The test set decides before we build on it. Fall back to Gemini through config. |
-| 9 | Counsel objects to lead data reaching Ollama Cloud | Move to our own Mumbai server, about $155 a month or more. |
+| 8 | The chosen model scores poorly, especially on Arabic | The test set decides before we build on it. Swap through config. |
 
 ## 16. Decision records
 

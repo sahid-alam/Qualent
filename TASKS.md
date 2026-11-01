@@ -3,29 +3,37 @@
 Legend: [x] done · [~] in progress · [ ] not started · [!] waiting on you
 
 ## Planning (done)
-- [x] Research, feature list and your answers
-- [x] docs/ARCHITECTURE.md, docs/PRD.md, docs/ROADMAP.md, docs/adr/, CLAUDE.md
-- [x] Your decisions: Telegram buttons, Mumbai on Vercel, Gemma through Ollama, no WhatsApp in v1, name Qualent
-- [x] Plan approved 2026-11-01
-- [x] ROI-Maxi design cleared for reuse: it is your own
+- [x] Research, feature list, architecture, PRD, roadmap, decision records
+- [x] Decisions: Telegram buttons, Mumbai on free Vercel for v1, no WhatsApp in v1, name Qualent, AI model later
 
-## Your side (ROADMAP M0)
+## Waiting on you
+- [!] Repo is PUBLIC: make it private, or confirm public, then I push
+- [!] Keys and accounts when ready: Supabase, Vercel, Telegram bot, Meta app, Sentry
+- [!] Move to Vercel Pro before the first paying client (free plan is non-commercial)
 - [!] Meta Business Verification
-- [!] UAE counsel: PDPL, hosting in India, and lead data reaching Ollama Cloud
+- [!] UAE counsel: PDPL and hosting in India
 - [!] Trademark and domain check for "Qualent" (qualent.com is taken)
-- [!] Accounts: Vercel Pro, Supabase, Ollama, Kimi, Sentry
 - [!] Check how much client spend runs on Click-to-WhatsApp ads
+- [!] Choose the AI model
 
-## M1: Foundation
-- [x] 1.1 Git repo, Next.js 16, TypeScript, Tailwind 4, theme (nothing committed yet)
-- [~] 1.2 CI file written and all checks pass locally; not yet run on GitHub  (needs a GitHub repo)
-- [~] 1.3 Migration works on local Postgres  (needs your Supabase account)
-- [~] 1.4 vercel.json and worker image ready; image tested in Docker  (needs your Vercel account)
-- [ ] 1.5 Confirm Daemons run in Mumbai  (needs 1.4)
-- [x] 1.6 pg-boss delayed job survives a worker crash, tested on local Postgres
-- [ ] 1.7 Measure the database round trip; test poolers  (needs 1.3, 1.4)
-- [ ] 1.8 Sentry and uptime check  (needs your Sentry account)
-- [x] 1.9 Worker heartbeat and /api/health, tested on local Postgres
+## Backend (branch: backend, committed locally, tested on local Postgres)
+- [x] M1 Foundation code, CI file, job runner, heartbeat, health
+- [x] M2 Tenancy, row-level security, roles, audit log
+- [x] M3 Leads, pipelines, stages, tasks, custom fields, filters, CSV
+- [x] M4 Meta and landing page intake, inbox, safety poll
+- [x] M5 Telegram linking, alerts, delivery, buttons; routing and reply timers
+- [x] M6 Meta events: hashing, shapes, retries, expiry, test mode, health data
+- [x] M7 Automation engine
+- [x] M8 AI layer, with no model configured
+- [x] M9 Spend sync, client and team reports (brand colors moved to the frontend phase)
+- [x] M10 Consent, export, erase, retention (not backups or the pilot)
 
-## M2 to M10
-- [ ] Per docs/ROADMAP.md
+## Not done until you give keys
+- [ ] Run against real Supabase, Vercel, Meta and Telegram
+- [ ] Test supabase/cron.sql and pg-boss through the pooler
+- [ ] Sentry, uptime check, backups and restore drill
+- [ ] Supabase Auth session wiring (with the login screens)
+
+## Frontend
+- [~] Flows as artifacts, using Mobbin  ← next
+- [ ] Screens, after you approve the flows

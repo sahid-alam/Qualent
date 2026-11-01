@@ -1,41 +1,27 @@
-import { createDb } from "../lib/db/client.ts";
-import { workerHeartbeat } from "../lib/db/schema.ts";
-import { HEARTBEAT_INTERVAL_MS } from "../lib/health.ts";
-import { createWorkerBoss, ECHO_QUEUE } from "../lib/queue.ts";
+// A long-lived runner, for local development or a host with always-on workers.
+// On Vercel's free plan, the scheduler calls /api/cron/tick instead.
+import { drain, tick } from "../lib/jobs/runner.ts";
 
-// Session pooler or direct connection, never the transaction pooler.
-const url = process.env.WORKER_DATABASE_URL;
-const db = createDb(url, 2);
-const boss = createWorkerBoss(url);
+const LOOP_MS = 2_000;
+const TICK_EVERY_MS = 60_000;
 
-boss.on("error", (error) => console.error("pg-boss error:", error.message));
+let running = true;
+process.once("SIGTERM", () => (running = false));
+process.once("SIGINT", () => (running = false));
 
-await boss.start();
-await boss.createQueue(ECHO_QUEUE);
-await boss.work(ECHO_QUEUE, async ([job]) => {
-  console.log("echo job ran:", job.id);
-});
-
-async function beat() {
-  const beatAt = new Date();
-  try {
-    await db
-      .insert(workerHeartbeat)
-      .values({ beatAt })
-      .onConflictDoUpdate({ target: workerHeartbeat.id, set: { beatAt } });
-  } catch (error) {
-    console.error("heartbeat failed:", (error as Error).message);
-  }
-}
-
-await beat();
-const timer = setInterval(beat, HEARTBEAT_INTERVAL_MS);
+let lastTick = 0;
 console.log("worker ready");
-
-async function shutdown() {
-  clearInterval(timer);
-  await boss.stop({ graceful: true, timeout: 25_000 });
-  process.exit(0);
+while (running) {
+  try {
+    if (Date.now() - lastTick >= TICK_EVERY_MS) {
+      lastTick = Date.now();
+      await tick({ budgetMs: 10_000 });
+    } else {
+      await drain({ budgetMs: 10_000 });
+    }
+  } catch (error) {
+    console.error(`worker loop failed: ${(error as Error).message}`);
+  }
+  await new Promise((resolve) => setTimeout(resolve, LOOP_MS));
 }
-process.once("SIGTERM", shutdown);
-process.once("SIGINT", shutdown);
+process.exit(0);

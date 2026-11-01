@@ -1,23 +1,16 @@
-# ADR-0007: One AI adapter, with Gemma through Ollama for lead work
+# ADR-0007: One AI adapter; the model is chosen later
 
-Status: Accepted, 2026-11-01. The owner chose free Ollama models such as Gemma; where it runs is the architect's choice.
+Status: Accepted, 2026-11-01. The owner: "we will figure out model later".
 
-**Context:** the owner wants free models. Gemma 4 is free to use (Apache 2.0 [Secondary]), but it still needs a machine, and Vercel cannot host it. Kimi's privacy policy lists training on user content.
+**Context:** the owner leans towards free Ollama models such as Gemma, and has not decided. Prices and models change often. Kimi's privacy policy lists training on user content.
 
 **Decision:**
-- One `ai.run()` function, one OpenAI-format adapter, and an `ai_models` config row per model.
-- Gemma 4 handles lead work: local Ollama for building and testing, **Ollama Cloud `gemma4:cloud` in production**.
-- `kimi-k3.1-pro` with `reasoning_effort: low` handles ad analysis on aggregated numbers only. The owner's choice of Ollama did not address this job, so it stays.
-- The router refuses to send lead data to any model with `no_training = false`.
+- One `aiRun()` function, one OpenAI-format adapter, and an `ai_models` row per model. No model is configured in v1 yet.
+- With no model, leads flow normally and stay unscored. Nothing fakes a score.
+- Lead data only reaches models with `no_training = true`, enforced in `aiRun()` and tested.
 - Names, phones and emails become placeholders. The model has no tools, and output is schema-checked.
+- Monthly budget per client: warn at 80%, stop at 100%.
 
-**Why not our own server first:** about $155 a month for a slow CPU server or $423 for a GPU, against about $0.40 per 1,000 leads on Ollama Cloud (reported price, unverified).
+**Options when deciding:** see ARCHITECTURE.md section 9. Gemma is free but needs a machine: about $0.40 per 1,000 leads on Ollama Cloud (reported price, unverified), or $155–423 a month for our own server. Gemma's Arabic and JSON quality are untested.
 
-**Consequences:**
-- Lead data leaves our hosting and is probably processed in the US. Ollama says it is "never logged or trained on", which is not independently checked. Terms and counsel's view come before real lead data.
-- Gemma's Arabic and JSON quality is untested. The M8 test set decides, and `gemini-3.1-flash-lite` is the fallback.
-- Every new model must pass the same test set. Swapping needs no code.
-
-**Switch to our own server if:** a contract forbids outside AI, counsel objects, or monthly Ollama Cloud spend passes about $155.
-
-**To record in M8:** Ollama Cloud's terms, its confirmed Gemma price, and the test results.
+**Consequences:** adding a model means one row and an API key in the environment, with no code change, then running the test set.

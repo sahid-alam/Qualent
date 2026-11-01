@@ -123,7 +123,7 @@ Full list: [FEATURES.md](FEATURES.md).
 
 | Area | Requirement |
 |---|---|
-| Hosting | Supabase and Vercel in Mumbai |
+| Hosting | Supabase and Vercel in Mumbai, on free plans for v1 |
 | Recovery | At most 5 minutes of data lost, restored within 4 hours (proposal), with a quarterly restore drill |
 | Privacy in logs | No phone numbers, emails or message text in logs |
 | Secrets | Encrypted at rest with the key held in the environment only. All webhooks verify signatures |
@@ -142,7 +142,7 @@ Full list: [FEATURES.md](FEATURES.md).
 | Item | Owner | Why it matters |
 |---|---|---|
 | Meta Business Verification and App Review | 7Gence | Outside our control and could take weeks. Blocks real client leads |
-| UAE counsel on PDPL, hosting in India, and lead data reaching Ollama Cloud | 7Gence | Should be settled before signing the first client |
-| Kimi K3.1 Pro price, and Gemma's price on Ollama Cloud | Engineering | Neither is confirmed yet. Check in the consoles |
-| Vercel Daemons in Mumbai | Engineering | Confirm in M1. Cloud Run is the fallback |
-| Gemma 4 quality, including Arabic | Engineering | Untested. The M8 test set decides; Gemini is the fallback |
+| UAE counsel on PDPL and hosting in India | 7Gence | Should be settled before signing the first client |
+| Vercel Pro | 7Gence | Hobby is non-commercial. Needed before the first paying client |
+| AI model | 7Gence | Decided later. AI features stay off until then, and leads show as unscored |
+| Scheduler and pg-boss on real Supabase | Engineering | Untested until the projects exist |
