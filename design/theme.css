@@ -1,0 +1,457 @@
+/* =============================================================================
+   Qualent — theme tokens (Tailwind CSS v4 drop-in)
+   -----------------------------------------------------------------------------
+   Derived from the ROI-Maxi "Ember" design (roi-maxi-master-inbox/components/
+   ember/ui.tsx + design_handoff_roi_maxi_dashboard). Full rationale, sources and
+   contrast measurements: docs/design/DESIGN_SYSTEM.md. Machine-readable twin:
+   design/tokens.json.
+
+   Usage (app/globals.css):
+     @import "tailwindcss";
+     @import "../design/theme.css";
+
+   Rules:
+   - Always render <html data-theme="dark|light" dir="ltr|rtl" lang="..">.
+     `dark:` is bound to the attribute (below), not to prefers-color-scheme;
+     resolve "system" on the server (cookie) or before paint.
+   - Tenant branding = the --brand-* variables only, injected server-side as an
+     inline style on <html>. Contrast-critical values are resolved at save time
+     (DESIGN_SYSTEM.md section 9). Tenants never touch neutrals or feedback colours.
+   - Token file only. No component classes live here.
+   ============================================================================= */
+
+/* `dark:` follows the attribute, so a tenant/user toggle works without media queries. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* -----------------------------------------------------------------------------
+   1. Tenant brand hook (defaults = Ember orange)
+   Contrast-critical vars (marked !) MUST be server-resolved per tenant; the
+   pure-CSS fallback cannot guarantee AA for an arbitrary brand colour (measured
+   worst case 3.05:1), so it is deliberately not attempted.
+   ----------------------------------------------------------------------------- */
+:root {
+  --brand: #ff6a2b;                 /* raw tenant colour: logo, glow, tints, charts */
+  --brand-solid-from: #ff8a4c;      /* ! primary fill, gradient start   (ui.tsx:10) */
+  --brand-solid-to: #e8410a;        /* ! primary fill, gradient end     (ui.tsx:10) */
+  --brand-on-solid: #1a0f0a;        /* verified against the two gradient stops only: never put text on raw --brand */        /* ! label on fill: 8.05 / 4.65:1. Proposed; Ember used #fff (2.34 / 4.04, fails) */
+  --brand-text-dark: #ff8a4c;       /* ! brand text + focus ring on dark: 8.52:1 (ui.tsx:9) */
+  --brand-text-light: #b93d0a;      /* ! brand text + focus ring on light: 5.49:1 (proposed) */
+  --brand-logo: none;               /* url("…") set per tenant */
+  --brand-font: var(--font-sans);   /* display/headings only; body font is locked */
+
+  /* Non-critical derivations: safe for any brand, so CSS does them. */
+  --brand-soft: color-mix(in oklab, var(--brand) 13%, transparent);       /* chip fill   (ui.tsx:311) */
+  --brand-line: color-mix(in oklab, var(--brand) 30%, transparent);       /* chip border (ui.tsx:310) */
+  --brand-glow: color-mix(in oklab, var(--brand) 85%, transparent);       /* shadow tint; Ember used rgba(255,86,20,.9) */
+  --gradient-accent: linear-gradient(135deg, var(--brand-solid-from), var(--brand-solid-to));
+  --gradient-bar: linear-gradient(180deg, var(--brand-solid-from), color-mix(in oklab, var(--brand-solid-to) 30%, transparent)); /* DashboardView.tsx:574 */
+  --gradient-bar-h: linear-gradient(90deg, var(--brand-solid-from), var(--brand-solid-to));    /* DashboardView.tsx:743 */
+  --wash-hero: radial-gradient(110% 100% at 22% 0%,
+      color-mix(in oklab, var(--brand) 30%, transparent) 0%,
+      color-mix(in oklab, var(--brand) 7%, transparent) 40%,
+      transparent 72%);           /* handoff README.md:71-73 */
+}
+
+/* -----------------------------------------------------------------------------
+   2. Semantic colours — DARK (Ember, extracted; default)
+   ----------------------------------------------------------------------------- */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surfaces, lowest → highest */
+  --canvas: #060505;                          /* app shell      EmberApp.tsx:227 */
+  --panel: #0a0908;                           /* main panels    ui.tsx:29 */
+  --sidebar: #100e0d;                         /* nav rail       EmberApp.tsx:243 */
+  --card: rgb(255 255 255 / 0.02);            /* card on panel  ui.tsx:34 */
+  --inner: rgb(255 255 255 / 0.025);          /* nested block   ui.tsx:44 */
+  --control: rgb(255 255 255 / 0.04);         /* input fill     ui.tsx:326 */
+  --control-hover: rgb(255 255 255 / 0.05);   /* secondary btn  ui.tsx:252 */
+  --hover: rgb(255 255 255 / 0.025);          /* row hover      globals.css:117 */
+  --sunken: rgb(0 0 0 / 0.3);                 /* code/prompt    ui.tsx:355 */
+  --overlay: rgb(24 20 19 / 0.92);            /* toast/menu     EmberApp.tsx:804 */
+  --inverse: #f6f3f0;                         /* active segment ui.tsx:292 */
+  --on-inverse: #0a0908;
+  --scrim: rgb(0 0 0 / 0.6);                  /* modal backdrop (proposed) */
+
+  /* Lines. Hairlines are decorative (WCAG 1.4.11 does not apply).
+     --line-control is for boundaries that identify a control: inputs,
+     checkboxes, toggle-off tracks. 3.24:1 on panel (proposed). */
+  --line: rgb(255 255 255 / 0.07);            /* ui.tsx:28 */
+  --line-strong: rgb(255 255 255 / 0.09);     /* ui.tsx:253 */
+  --line-hover: rgb(255 255 255 / 0.18);      /* globals.css:122 */
+  --line-control: rgb(255 255 255 / 0.36);
+
+  /* Text ramp. FAINT (#8a817c) and DIM (#7f7772) merged into muted: they sat within
+     0.2:1 of MUT and DIM failed on cards (4.40:1). */
+  --fg: #f6f3f0;                              /* 18.0:1  ui.tsx:11 */
+  --fg-soft: #c8c0bb;                         /* 11.1:1  ui.tsx:12 */
+  --fg-muted: #8d8480;                        /*  5.4:1  ui.tsx:18 */
+  --fg-disabled: #5d5551;                     /* exempt (disabled only) handoff DIM */
+
+  /* Accent (resolved from the tenant hook) */
+  --accent: var(--brand-text-dark);
+  --ring: var(--brand-text-dark);
+
+  /* Feedback. Fixed for every tenant. */
+  --good: #45c08a;                            /* 8.7:1 ui.tsx:21 */
+  --warn: #e0a94a;                            /* 9.4:1 ui.tsx:22 */
+  --bad: #ec6360;                             /* 6.2:1 ui.tsx:23 */
+  --info: #7fa3c9;                            /* 7.6:1 data.ts:44 */
+  --good-soft: rgb(69 192 138 / 0.1);
+  --warn-soft: rgb(224 169 74 / 0.12);
+  --bad-soft: rgb(236 99 96 / 0.12);
+  --info-soft: rgb(111 159 208 / 0.1);
+  --on-good: #06140d;
+  --on-warn: #1c1816;
+  --on-bad: #1a0605;
+
+  /* Lead temperature (data.ts:41-45). "Hot" is pinned to Ember orange, NOT the
+     tenant brand: a blue-branded tenant must still read hot as hot. */
+  --lead-hot: #ff8a4c;
+  --lead-warm: #c9a15c;
+  --lead-cold: #7fa3c9;
+  --lead-hot-soft: rgb(255 106 43 / 0.14);
+  --lead-warm-soft: rgb(224 169 74 / 0.12);
+  --lead-cold-soft: rgb(111 159 208 / 0.1);
+  --lead-hot-line: rgb(255 106 43 / 0.3);
+  --lead-warm-line: rgb(224 169 74 / 0.26);
+  --lead-cold-line: rgb(111 159 208 / 0.24);
+
+  /* Charts: categorical, all ≥3:1 on panel (proposed; 1 = tenant brand) */
+  --chart-1: var(--brand-text-dark);   /* resolved, not raw brand: >=8.9:1 for any tenant */
+  --chart-2: #6f9fd0;
+  --chart-3: #45c08a;
+  --chart-4: #e0a94a;
+  --chart-5: #9a7cf0;
+  --chart-6: #e0679a;
+  --chart-grid: rgb(255 255 255 / 0.07);
+
+  /* Elevation. Ember is flat-with-hairlines; shadows only for floating layers. */
+  --elev-card: none;
+  --elev-pop: 0 18px 44px -14px rgb(0 0 0 / 0.85);                           /* EmberApp.tsx:807 */
+  --elev-modal: 0 30px 80px -30px rgb(0 0 0 / 0.9), inset 0 1px 0 rgb(255 255 255 / 0.1); /* handoff signin card */
+  --elev-glow: 0 8px 22px -9px var(--brand-glow);                              /* ui.tsx:237 */
+  --elev-glow-lg: 0 10px 26px -8px var(--brand-glow);                          /* handoff .dc.html:133 */
+  --elev-live: 0 0 8px 1px rgb(69 192 138 / 0.7);                              /* EmberApp.tsx:628 */
+  --scrollbar: #2a2523;                                                          /* handoff .dc.html:16 */
+}
+
+/* -----------------------------------------------------------------------------
+   3. Semantic colours — LIGHT (proposed; Ember had none — layout.tsx:34)
+   Warm paper neutrals mirroring the warm-black ramp. All text ≥4.5:1 on panel
+   and card, control lines ≥3:1. Measurements in DESIGN_SYSTEM.md section 5.
+   ----------------------------------------------------------------------------- */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --canvas: #f3efeb;
+  --panel: #fdfcfb;
+  --sidebar: #f8f5f2;
+  --card: rgb(28 24 22 / 0.025);
+  --inner: rgb(28 24 22 / 0.03);
+  --control: rgb(28 24 22 / 0.04);
+  --control-hover: rgb(28 24 22 / 0.06);
+  --hover: rgb(28 24 22 / 0.035);
+  --sunken: rgb(28 24 22 / 0.05);
+  --overlay: rgb(253 252 251 / 0.94);
+  --inverse: #1c1816;
+  --on-inverse: #fdfcfb;
+  --scrim: rgb(28 24 22 / 0.4);
+
+  --line: rgb(28 24 22 / 0.08);
+  --line-strong: rgb(28 24 22 / 0.12);
+  --line-hover: rgb(28 24 22 / 0.22);
+  --line-control: #8f8781;                    /* 3.44:1 panel, 3.28:1 card */
+
+  --fg: #1c1816;                              /* 17.2:1 */
+  --fg-soft: #3f3935;                         /* 11.1:1 */
+  --fg-muted: #6b625d;                        /*  5.8:1 */
+  --fg-disabled: #a39b96;
+
+  --accent: var(--brand-text-light);
+  --ring: var(--brand-text-light);
+
+  --good: #1d7a52;                            /* 5.2:1 */
+  --warn: #8f5f0c;                            /* 5.4:1 */
+  --bad: #c0352f;                             /* 5.4:1 */
+  --info: #2f6f95;                            /* 5.4:1 */
+  --good-soft: rgb(29 122 82 / 0.1);
+  --warn-soft: rgb(143 95 12 / 0.1);
+  --bad-soft: rgb(192 53 47 / 0.1);
+  --info-soft: rgb(47 111 149 / 0.1);
+  --on-good: #ffffff;                         /* 5.3:1 */
+  --on-warn: #ffffff;
+  --on-bad: #ffffff;                          /* 5.5:1 */
+
+  --lead-hot: #b93d0a;                        /* 5.5:1 */
+  --lead-warm: #8a6420;                       /* 5.2:1 */
+  --lead-cold: #3c6693;                       /* 5.8:1 */
+  --lead-hot-soft: rgb(185 61 10 / 0.1);
+  --lead-warm-soft: rgb(138 100 32 / 0.1);
+  --lead-cold-soft: rgb(60 102 147 / 0.1);
+  --lead-hot-line: rgb(185 61 10 / 0.28);
+  --lead-warm-line: rgb(138 100 32 / 0.28);
+  --lead-cold-line: rgb(60 102 147 / 0.28);
+
+  --chart-1: var(--brand-text-light);
+  --chart-2: #3f72a8;
+  --chart-3: #23895c;
+  --chart-4: #a8770f;
+  --chart-5: #7356d6;
+  --chart-6: #c24676;
+  --chart-grid: rgb(28 24 22 / 0.08);
+
+  --elev-card: 0 1px 2px rgb(28 24 22 / 0.05);
+  --elev-pop: 0 12px 32px -12px rgb(28 24 22 / 0.25), 0 2px 6px rgb(28 24 22 / 0.06);
+  --elev-modal: 0 30px 80px -30px rgb(28 24 22 / 0.35);
+  --elev-glow: 0 8px 22px -10px color-mix(in oklab, var(--brand) 55%, transparent);
+  --elev-glow-lg: 0 10px 26px -10px color-mix(in oklab, var(--brand) 55%, transparent);
+  --elev-live: 0 0 6px 1px rgb(29 122 82 / 0.45);
+  --scrollbar: #d6cfc9;
+}
+
+/* -----------------------------------------------------------------------------
+   4. Non-colour runtime tokens (not Tailwind namespaces; use as h-(--control-md))
+   ----------------------------------------------------------------------------- */
+:root {
+  /* Control heights. Ember used 26/30/31/34/36/38/40/42/44/46/48. */
+  --control-sm: 2rem;      /* chips, segmented, inline pills (was 26–31) */
+  --control-md: 2.5rem;    /* default button/input (was 36–42) */
+  --control-lg: 2.75rem;   /* nav item, primary CTA (was 44–46) */
+  --control-xl: 3rem;      /* sign-in, mobile primary (was 48) */
+  --target-min: 2.75rem;   /* 44px hit area on coarse pointers */
+  --text-input-mobile: 1rem; /* inputs on touch: >=16px stops iOS zoom-on-focus */
+
+  /* Table density (data tables, lists, kanban cards) */
+  --row-h: 2.75rem;        /* default 44px */
+  --row-px: 1.25rem;       /* RepliesView.tsx:199 padding 12px 20px */
+
+  /* Shell layout (EmberApp.tsx, TodayView.tsx) */
+  --shell-gap: 0.625rem;        /* 10px  EmberApp.tsx:225-226 */
+  --w-sidebar: 14.5rem;         /* 232px EmberApp.tsx:245 */
+  --w-rail: 4.75rem;            /* 76px  EmberApp.tsx:245 */
+  --w-queue: 21.75rem;          /* 348px TodayView.tsx:205 */
+  --w-thread-min: 26.25rem;     /* 420px TodayView.tsx:496 */
+  --w-detail: 17.5rem;          /* 280px TodayView.tsx:993 */
+  --w-content: 70rem;           /* 1120px handoff README.md:66 */
+
+  /* Layers */
+  --z-sticky: 10;
+  --z-dropdown: 20;
+  --z-drawer: 40;
+  --z-modal: 50;
+  --z-toast: 100;               /* EmberApp.tsx:733,796 */
+
+  /* Direction sign for transforms (logical properties do not cover translateX). */
+  --dir: 1;
+}
+[data-density="compact"] { --row-h: 2.25rem; --row-px: 0.875rem; }       /* 36px */
+[data-density="comfortable"] { --row-h: 3.25rem; --row-px: 1.5rem; }    /* 52px */
+[dir="rtl"] { --dir: -1; }        /* e.g. translate: calc(-6px * var(--dir)) 0 */
+
+/* Deliberately overrides data-density on touch: 44px+ targets beat density. */
+@media (pointer: coarse) {
+  :root { --control-md: 2.75rem; --control-sm: 2.5rem; --row-h: 3.25rem; }
+}
+
+/* -----------------------------------------------------------------------------
+   5. Tailwind theme — colours map to the runtime vars above (inline = emit
+   var(--x) so the value flips per data-theme / tenant at runtime).
+   ----------------------------------------------------------------------------- */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-panel: var(--panel);
+  --color-sidebar: var(--sidebar);
+  --color-card: var(--card);
+  --color-inner: var(--inner);
+  --color-control: var(--control);
+  --color-control-hover: var(--control-hover);
+  --color-hover: var(--hover);
+  --color-sunken: var(--sunken);
+  --color-overlay: var(--overlay);
+  --color-inverse: var(--inverse);
+  --color-on-inverse: var(--on-inverse);
+  --color-scrim: var(--scrim);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-line-hover: var(--line-hover);
+  --color-line-control: var(--line-control);
+
+  --color-fg: var(--fg);
+  --color-fg-soft: var(--fg-soft);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-disabled: var(--fg-disabled);
+
+  --color-brand: var(--brand);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--brand-soft);
+  --color-accent-line: var(--brand-line);
+  --color-on-accent: var(--brand-on-solid);
+  --color-ring: var(--ring);
+
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-info: var(--info);
+  --color-good-soft: var(--good-soft);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad-soft: var(--bad-soft);
+  --color-info-soft: var(--info-soft);
+  --color-on-good: var(--on-good);
+  --color-on-warn: var(--on-warn);
+  --color-on-bad: var(--on-bad);
+
+  --color-hot: var(--lead-hot);
+  --color-warm: var(--lead-warm);
+  --color-cold: var(--lead-cold);
+  --color-hot-soft: var(--lead-hot-soft);
+  --color-warm-soft: var(--lead-warm-soft);
+  --color-cold-soft: var(--lead-cold-soft);
+  --color-hot-line: var(--lead-hot-line);
+  --color-warm-line: var(--lead-warm-line);
+  --color-cold-line: var(--lead-cold-line);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-grid: var(--chart-grid);
+
+  --shadow-card: var(--elev-card);
+  --shadow-pop: var(--elev-pop);
+  --shadow-modal: var(--elev-modal);
+  --shadow-glow: var(--elev-glow);
+  --shadow-glow-lg: var(--elev-glow-lg);
+  --shadow-live: var(--elev-live);
+
+  --font-display: var(--brand-font);
+}
+
+/* Static theme values (emitted as vars on :root; utilities reference them, so
+   the :lang(ar) overrides in section 6 take effect). */
+@theme static { /* static: these are also read with var(), so Tailwind must not drop them as unused */
+  /* Fonts — load with next/font: Geist (--font-geist), Geist_Mono
+     (--font-geist-mono), IBM_Plex_Sans_Arabic (--font-arabic, weights 400/500/600/700).
+     Geist first: Latin stays Geist, Arabic glyphs fall through to Plex. Inter dropped. */
+  --font-sans: var(--font-geist), var(--font-arabic, "Noto Sans Arabic"), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* Type scale (rem, so it honours user font-size). Collapses Ember's 22 px sizes
+     (9.5–34, incl. 10.5/11.5/12.5/13.5/14.5) to 10 steps. 11px is the floor. */
+  --text-2xs: 0.6875rem;   --text-2xs--line-height: 1.45;  /* 11  mono labels, timestamps (was 9.5–11) */
+  --text-xs: 0.75rem;      --text-xs--line-height: 1.5;    /* 12  meta, chips (was 11.5–12) */
+  --text-sm: 0.8125rem;    --text-sm--line-height: 1.55;   /* 13  buttons, table cells (was 12.5–13) */
+  --text-base: 0.875rem;   --text-base--line-height: 1.55; /* 14  body, nav (EmberApp.tsx:228) */
+  --text-md: 0.9375rem;    --text-md--line-height: 1.5;    /* 15  emphasised body */
+  --text-lg: 1.0625rem;    --text-lg--line-height: 1.4;    /* 17  card titles (was 17–18) */
+  --text-xl: 1.1875rem;    --text-xl--line-height: 1.35;   /* 19  view titles (TodayView.tsx:216) */
+  --text-2xl: 1.375rem;    --text-2xl--line-height: 1.3;   /* 22  stat values (was 22–24) */
+  --text-3xl: 1.6875rem;   --text-3xl--line-height: 1.2;   /* 27  sign-in, big stats (was 27–30) */
+  --text-4xl: 2.125rem;    --text-4xl--line-height: 1.15;  /* 34  dashboard hero (README.md:94) */
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --tracking-tighter: -0.03em;  /* hero + stat values (README.md:94,110) */
+  --tracking-tight: -0.02em;    /* headings (TodayView.tsx:216) */
+  --tracking-normal: 0em;
+  --tracking-label: 0.12em;     /* mono uppercase section labels (ui.tsx:156) */
+
+  /* Radii. Ember: 999 ×126, 26 ×11, 22 ×13, 24 ×4, 20 ×4, 34 ×1.
+     Pill + 26px panel kept as the signature; small radii added for dense data UI. */
+  --radius-tight: 0.375rem;   /* 6   checkbox, kbd */
+  --radius-dense: 0.625rem;   /* 10  table rows, menu items, dense inputs (new) */
+  --radius-menu: 0.875rem;    /* 14  popover, dropdown, tooltip (new) */
+  --radius-row: 1.25rem;      /* 20  list rows (handoff README.md:146) */
+  --radius-card: 1.375rem;    /* 22  inner card, table wrapper (ui.tsx:42) */
+  --radius-tile: 1.5rem;      /* 24  stat tile (README.md:109) */
+  --radius-panel: 1.625rem;   /* 26  panels, sidebar (ui.tsx:27) */
+  --radius-modal: 2.125rem;   /* 34  modal, sign-in card */
+  /* pills: Tailwind's built-in rounded-full */
+
+  /* Motion (EmberApp.tsx:37, globals.css:87-124) */
+  --ease-ember: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-standard: ease;
+  --animate-view: em-in 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-in: em-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-pop: em-pop 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-toast: em-toast 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-spin: spin 1s linear infinite;
+
+  @keyframes em-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @keyframes em-pop { from { opacity: 0; transform: translateY(-5px) scale(0.97); } to { opacity: 1; transform: none; } }
+  /* Toast enters vertically only; centre it with inset-inline + margin-inline:auto,
+     not translate(-50%), so it is direction-neutral. */
+  @keyframes em-toast { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+  /* Breakpoints: Tailwind defaults + Ember's two JS floors (EmberApp.tsx:77-78) */
+  --breakpoint-desk: 77.5rem;   /* 1240: Today folds the score rail */
+  --breakpoint-wide: 87.5rem;   /* 1400: sidebar becomes the full 232px rail */
+}
+
+/* Durations as plain vars: duration-(--dur-fast) */
+:root {
+  --dur-press: 120ms;   /* button press scale .97  globals.css:110-112 */
+  --dur-fast: 150ms;    /* hover colour/border      globals.css:109 */
+  --dur-base: 200ms;    /* fades, shadows */
+  --dur-slow: 300ms;    /* view enter, sidebar      EmberApp.tsx:247 */
+  --press-scale: 0.97;
+  --lift: -2px;         /* card hover               globals.css:122 */
+}
+
+/* -----------------------------------------------------------------------------
+   6. Arabic / RTL typography
+   Arabic joins letters; any letter-spacing breaks the joins, and the script
+   needs taller lines than Latin. Uppercase has no effect, so mono labels just
+   lose the tracking.
+   ----------------------------------------------------------------------------- */
+:lang(ar) {
+  --tracking-tighter: 0em;
+  --tracking-tight: 0em;
+  --tracking-label: 0em;
+  --text-2xs--line-height: 1.7;
+  --text-xs--line-height: 1.7;
+  --text-sm--line-height: 1.75;
+  --text-base--line-height: 1.75;
+  --text-md--line-height: 1.7;
+  --text-lg--line-height: 1.6;
+  --text-xl--line-height: 1.5;
+  --text-2xl--line-height: 1.45;
+  --text-3xl--line-height: 1.4;
+  --text-4xl--line-height: 1.35;
+}
+
+/* -----------------------------------------------------------------------------
+   7. Base (token-level only)
+   ----------------------------------------------------------------------------- */
+/* Layered so utilities (e.g. focus-visible:outline-none) can still override. */
+@layer base {
+  html {
+    background: var(--canvas);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    scrollbar-color: var(--scrollbar) transparent;
+    scrollbar-width: thin;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--brand) 35%, transparent); /* globals.css:65 */
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-press: 0ms; --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; --press-scale: 1; --lift: 0px; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

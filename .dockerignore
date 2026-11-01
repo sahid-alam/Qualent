@@ -1,0 +1,7 @@
+.git
+.next
+.vercel
+.env*
+node_modules
+docs
+tests
