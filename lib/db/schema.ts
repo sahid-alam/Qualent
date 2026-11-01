@@ -83,6 +83,8 @@ export const members = pgTable(
     id: id(),
     tenantId: tenantId(),
     userId: uuid(),
+    // Staff and clients get a login by email. Linked on their first sign-in.
+    inviteEmail: text(),
     name: text().notNull(),
     role: text({ enum: ROLES }).notNull(),
     recordScope: text({ enum: ["all", "assigned"] }).notNull().default("all"),

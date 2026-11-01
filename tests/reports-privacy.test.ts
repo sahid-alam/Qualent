@@ -7,6 +7,7 @@ import { ingestLead } from "../lib/leads/ingest.ts";
 import { changeStage } from "../lib/leads/work.ts";
 import { applyRetention, cleanInbox, eraseContact, exportContact } from "../lib/privacy.ts";
 import { campaignReport, syncSpend, teamReport } from "../lib/reports.ts";
+import { sendTestLead } from "../lib/settings.ts";
 import { addMember, newTenant, stageByName, stubFetch, uniquePhone } from "./helpers.ts";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -35,6 +36,13 @@ test("the campaign report matches a hand calculation, and labels manual leads", 
   expect(villas).toMatchObject({ name: "Villas", leads: 4, qualified: 3, won: 1, spend: 400, costPerLead: 100, costPerQualified: 133.33, costPerDeal: 400 });
   expect(campaigns.find((row) => row.manual)).toMatchObject({ name: "Manual entries", leads: 1, spend: 0, costPerLead: 0 });
   expect(JSON.stringify(campaigns)).not.toMatch(/\+971/);
+});
+
+test("the setup test lead never appears in reports", async () => {
+  const { id } = await newTenant();
+  await sendTestLead(id, "t");
+  const { campaigns } = await campaignReport(id, today, today);
+  expect(campaigns).toEqual([]);
 });
 
 test("spend sync stores days, follows pages, and can run twice", async () => {

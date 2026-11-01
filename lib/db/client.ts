@@ -34,8 +34,8 @@ export function withTenant<T>(tenantId: string, fn: (db: Db) => Promise<T>, acto
 }
 
 /** Reads the caller's own memberships across tenants, for login and switching. */
-export function withUser<T>(userId: string, fn: (db: Db) => Promise<T>) {
-  return inTransaction({ "app.user_id": userId, "app.actor": userId }, fn);
+export function withUser<T>(userId: string, fn: (db: Db) => Promise<T>, verifiedEmail = "") {
+  return inTransaction({ "app.user_id": userId, "app.actor": userId, "app.user_email": verifiedEmail }, fn);
 }
 
 /** Non-tenant tables and the tenant list, for system jobs and platform admins. */

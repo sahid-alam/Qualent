@@ -96,6 +96,7 @@ export async function campaignReport(tenantId: string, from: string, to: string)
         count(*) filter (where l.status = 'won')::int as won
       from leads l join first_touch t on t.lead_id = l.id
       where l.created_at >= ${from}::date and l.created_at < ${to}::date + 1
+        and not coalesce(l.custom @> '{"test": true}', false)
       group by 1
     `);
     const spendRows = await db
@@ -143,6 +144,7 @@ export async function teamReport(tenantId: string, from: string, to: string) {
         round(avg(extract(epoch from l.first_response_at - l.assigned_at) / 60)::numeric, 1)::float as avg_response_minutes
       from members m
       left join leads l on l.owner_member_id = m.id and l.created_at >= ${from}::date and l.created_at < ${to}::date + 1
+        and not coalesce(l.custom @> '{"test": true}', false)
       where m.role in ('manager', 'agent')
       group by m.id, m.name order by leads desc
     `);

@@ -17,7 +17,7 @@ const REASONS: Record<string, string> = {
   delivery_failed: "Could not deliver to client agent",
 };
 
-const leadUrl = (leadId: string) => `${process.env.APP_URL ?? ""}/leads/${leadId}`;
+const leadUrl = (tenantId: string, leadId: string) => `${process.env.APP_URL ?? ""}/c/${tenantId}/leads/${leadId}`;
 
 function leadWithContact(db: Db, leadId: string) {
   return db
@@ -34,7 +34,7 @@ function teamAlertText(reason: string, row: Awaited<ReturnType<typeof leadWithCo
     REASONS[reason] ?? reason,
     `${row.contact.name ?? "Unknown"}, ${maskPhone(row.contact.phoneE164)}`,
     row.lead.temperature ? `AI: ${row.lead.temperature}` : null,
-    leadUrl(row.lead.id),
+    leadUrl(row.lead.tenantId, row.lead.id),
   ]
     .filter(Boolean)
     .join("\n");

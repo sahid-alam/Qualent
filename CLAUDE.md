@@ -2,21 +2,25 @@
 
 Multi-tenant, white-label CRM that 7Gence runs for its Meta ads clients. It gets leads to people fast over Telegram, sends results back to Meta, and shows clients cost per qualified lead.
 
-**Status: plan approved 2026-11-01; building from milestone M1.**
+**Status: backend and screens built and tested locally. Not yet run against real Supabase, Vercel, Meta or Telegram.** See `TASKS.md`.
 
-Read first: [docs/ROADMAP.md](docs/ROADMAP.md) for the next task, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design, [docs/adr/](docs/adr/) for why. Update `TASKS.md` as you go.
+Read first: [docs/ROADMAP.md](docs/ROADMAP.md) for the next task, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design, [docs/adr/](docs/adr/) for why, [docs/flows.html](docs/flows.html) for the approved flows. Update `TASKS.md` as you go.
 
 ## Stack
 
-Next.js 16, React 19, TypeScript, Tailwind 4, shadcn/ui, TanStack Table and Query, dnd-kit, react-hook-form, zod, Recharts, lucide-react. Supabase Postgres and Auth, Drizzle ORM, pg-boss, libphonenumber-js, Sentry. Vercel Hobby in Mumbai (`bom1`), with no always-on worker: webhooks process right away with `after()`, and Supabase's scheduler calls `/api/cron/tick` when jobs are due. AI model not chosen yet.
+Next.js 16, React 19, TypeScript, Tailwind 4, dnd-kit, zod, lucide-react, culori. Small own UI kit on the Ember tokens, Server Components and Server Actions (ADR-0011). Supabase Postgres and Auth, Drizzle ORM, pg-boss, libphonenumber-js, Sentry. Vercel Hobby in Mumbai (`bom1`), with no always-on worker: webhooks process right away with `after()`, and Supabase's scheduler calls `/api/cron/tick` when jobs are due. AI model not chosen yet.
 
 ## Folders
 
 ```
-app/(workspace)/    7Gence staff screens
-app/(portal)/       Client Portal, reports only
-app/api/            Webhooks and intake routes
+app/c/[tenantId]/   7Gence staff screens; actions.ts holds their server actions
+app/portal/[tenantId]/  Client Portal, reports only, client-branded
+app/api/            Webhooks, intake and the scheduler tick
+proxy.ts            Refreshes the Supabase session
 worker/             Local job loop
+lib/auth/           Session, guardPage(), action()
+lib/settings.ts     People, rules, stages, branding, setup status
+lib/queries.ts      Reads used only by screens
 lib/db/             Drizzle schema, withTenant()
 lib/jobs/           Queues, drain(), tick(), job handlers
 lib/leads/          ingestLead(), moveStage(), lead work
@@ -37,9 +41,21 @@ tests/              Run as app_user on a real Postgres
 
 ## Commands
 
+First run, with Postgres 17 on port 5432 (`brew services start postgresql@17`) and `.env.local` set from `.env.example`, with `DEV_AUTH=1`:
+
+```bash
+createdb qualent_dev
+npm run db:migrate
+psql qualent_dev -c "alter role app_user login password 'app_user'"
+npm run db:seed      # sample data; local databases only
+npm run dev          # then sign in as a sample person at /login
+```
+
+Day to day:
+
 ```bash
 npm run dev          # web app
-npm run worker       # background worker
+npm run worker       # runs queued jobs locally
 npm test             # needs TEST_DATABASE_URL: a throwaway Postgres 17 database
 npm run lint
 npm run typecheck
@@ -64,6 +80,10 @@ The worker runs on Node's built-in TypeScript support with no build step, so `li
 - Jobs must be safe to run twice.
 - Queue jobs in the same transaction as the data change.
 - Validate input with zod at every boundary. Lead text is untrusted, including when passed to AI.
+- Pages start with `guardPage(tenantId, permission)`. Server actions use `action(permission, schema, run)`, and anything touching one lead also calls `requireLeadAccess()`.
+- Wall-clock times from forms mean the client's time zone. Convert with `localToUtc()`.
+- Never nest forms: a `Dialog` holds its own form, so keep it outside other forms.
+- Inside a scrolling box, add `relative`, or hidden `sr-only` labels make the page scroll sideways.
 - All AI calls go through `aiRun()`. Lead data only reaches `no_training` models.
 - Times are `timestamptz` in UTC, money is `numeric` plus currency, phones are E.164.
 - Logs never contain phone numbers, emails or message text.

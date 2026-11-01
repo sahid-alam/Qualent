@@ -93,7 +93,7 @@ Main flow:
 | Area | Choice | Why |
 |---|---|---|
 | Frontend | **Next.js 16**, React 19, TypeScript, Tailwind 4, `design/theme.css` | Same stack as the reference, except 16 instead of 15.5. Next 16.4 is `latest` and 15 is on a backport tag, so a new project should not start a major version behind (opinion). |
-| UI parts | shadcn/ui, TanStack Table and Query, dnd-kit, react-hook-form, zod, Recharts, lucide-react (all MIT) | License-safe and already reviewed in `docs/research/open-source-crms.md`. |
+| UI parts | Own small kit on the Ember tokens, plus dnd-kit, zod, lucide-react and culori (all MIT) | The screens are lists and short forms, so server rendering and native elements cover most of it. See [ADR-0011](adr/0011-frontend-approach.md). |
 | Database | **Supabase Postgres**, also used by the reference | Row-level security, backups and Auth in one service, and it can be self-hosted if we must move. |
 | DB access | Drizzle ORM (Apache-2.0) from the server only | Real transactions. The browser never talks to the database. |
 | Auth | Supabase Auth | Already in the platform. MFA required for staff. |
