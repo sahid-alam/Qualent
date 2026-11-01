@@ -473,3 +473,13 @@ Open:
 - Will tenants want light as the default? (The current default is dark.)
 - Should tenants get a choice of digit system per user rather than per tenant?
 - Does the brand editor need to accept a secondary brand colour? (Suggested no for v1.)
+
+## ROI-Maxi port: how the signature pieces are built
+
+These were ported from `components/ember` without inline colors. `design/theme.css` holds the tokens.
+
+- **Score ring:** an SVG circle using `pathLength` and `strokeDasharray`, not a conic gradient, so no inline style is needed.
+- **Avatar:** `bg-avatar` reads `--hue`, hashed from the name and set on the element. Lightness stays at 30%, so white initials clear 4.5:1.
+- **Temperature fills:** `--gradient-hot`, `--gradient-warm` and `--gradient-cold` are pinned and never follow a client's brand. Ember's white label became `--on-temperature` ink, and the cold end moved from `#41678f` to `#5f8bb8` to reach AA.
+- **Brand-derived gradients and washes** are declared on `:root, [data-theme]`. A custom property's `var()` resolves where it is declared, so the portal's brand override only reaches them if they are redeclared on its wrapper.
+- **Allowed inline styles:** only data values, meaning bar width or height and `--hue`. Never a color.

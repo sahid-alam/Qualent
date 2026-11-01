@@ -16,7 +16,9 @@
     "check:css": "node scripts/check-physical-css.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/db-setup.ts",
-    "db:seed": "node --env-file-if-exists=.env.local scripts/seed.ts"
+    "db:seed": "node --env-file-if-exists=.env.local scripts/seed.ts",
+    "make-admin": "node --env-file-if-exists=.env.local scripts/make-admin.ts",
+    "telegram:setup": "node --env-file-if-exists=.env.local scripts/telegram-setup.ts"
   },
   "type": "module",
   "engines": {

@@ -26,7 +26,7 @@ export async function aiRun<S extends z.ZodType>(input: {
   const { tenantId, task, system, user, schema } = input;
 
   const gate = await withTenant(tenantId, async (db) => {
-    const models = await db.select().from(aiModels).where(eq(aiModels.active, true));
+    const models = await db.select().from(aiModels).where(eq(aiModels.active, true)).orderBy(aiModels.model);
     const model = models.find((row) => row.tasks.includes(task));
     if (!model) return { status: "not_configured" as const };
     if ((LEAD_TASKS as readonly string[]).includes(task) && !model.noTraining) return { status: "blocked" as const };

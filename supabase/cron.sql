@@ -20,7 +20,8 @@ $$;
 select cron.schedule('qualent-due-jobs', '* * * * *', $$
   select ops.wake_app() where exists (
     select 1 from pgboss.job
-    where state in ('created', 'retry') and start_after <= now()
+    -- Dead letters wait for a person, and would otherwise wake the app every minute.
+    where state in ('created', 'retry') and start_after <= now() and name <> 'dead_letter'
     limit 1
   );
 $$);

@@ -6,11 +6,12 @@ import { saveConnection } from "../lib/intake/meta.ts";
 import { ingestLead } from "../lib/leads/ingest.ts";
 import { changeStage } from "../lib/leads/work.ts";
 import { applyRetention, cleanInbox, eraseContact, exportContact } from "../lib/privacy.ts";
-import { campaignReport, syncSpend, teamReport } from "../lib/reports.ts";
+import { campaignReport, leadSummary, syncSpend, teamReport } from "../lib/reports.ts";
 import { sendTestLead } from "../lib/settings.ts";
 import { addMember, newTenant, stageByName, stubFetch, uniquePhone } from "./helpers.ts";
 
-const today = new Date().toISOString().slice(0, 10);
+// Report days are the tenant's calendar days, and test tenants are in Dubai.
+const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dubai" }).format(new Date());
 
 test("the campaign report matches a hand calculation, and labels manual leads", async () => {
   const { id } = await newTenant();
@@ -113,7 +114,7 @@ test("erasing removes personal data everywhere, and reports keep the count", asy
   const { contactId, leadId, phone } = await fullContact(id);
   const email = `erase-${phone.slice(1)}@example.com`;
   await withPlatform((db) =>
-    db.insert(webhookInbox).values({ source: "landing_page", externalId: `raw-${id}`, payload: { phone, email } }),
+    db.insert(webhookInbox).values({ source: "landing_page", externalId: `raw-${id}`, payload: { tenantId: id, phone, email } }),
   );
 
   expect(await eraseContact(id, contactId, "tester")).toBe(true);
@@ -174,4 +175,21 @@ test("the inbox drops rows older than 30 days", async () => {
   const left = await withPlatform((db) => db.select().from(webhookInbox));
   expect(left.some((row) => row.externalId === oldId)).toBe(false);
   expect(left.some((row) => row.externalId === newId)).toBe(true);
+});
+
+test("lead summary counts client days, fills gaps, and respects own-leads scope", async () => {
+  const { id } = await newTenant();
+  const owner = await addMember(id);
+  const { leadId } = await ingestLead(id, { source: "manual", phone: uniquePhone() });
+  await ingestLead(id, { source: "manual", phone: uniquePhone() });
+  // 21:30 UTC on the 9th is already 01:30 on the 10th in Dubai.
+  await withTenant(id, (db) => db.update(leads).set({ createdAt: new Date("2026-03-09T21:30:00Z"), ownerMemberId: owner.id, temperature: "hot", firstResponseAt: new Date("2026-03-09T21:42:00Z") }).where(eq(leads.id, leadId)));
+
+  const all = await leadSummary(id, "2026-03-09", "2026-03-11");
+  expect(all.days).toEqual([{ date: "2026-03-09", leads: 0 }, { date: "2026-03-10", leads: 1 }, { date: "2026-03-11", leads: 0 }]);
+  expect(all).toMatchObject({ total: 1, medianReplyMinutes: 12, temperature: { hot: 1, warm: 0, cold: 0, unscored: 0 } });
+
+  const other = await addMember(id);
+  expect((await leadSummary(id, "2026-03-09", "2026-03-11", { memberId: other.id, recordScope: "assigned" })).total).toBe(0);
+  expect((await leadSummary(id, "2026-03-09", "2026-03-11", { memberId: owner.id, recordScope: "assigned" })).total).toBe(1);
 });

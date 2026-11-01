@@ -72,7 +72,7 @@ describe("signing in", () => {
   test("an invite links on first sign-in, once, and only for the same email", async () => {
     const { id } = await newTenant();
     const person = await addPerson(id, { name: "Dana", role: "agent", email: " Dana@Example.com " }, "t");
-    expect(person.inviteEmail).toBe("dana@example.com");
+    expect(person?.inviteEmail).toBe("dana@example.com");
 
     const stranger = crypto.randomUUID();
     const userId = crypto.randomUUID();
@@ -80,7 +80,7 @@ describe("signing in", () => {
     await expect(requireMember(stranger, id, "leads.read")).rejects.toThrow(ForbiddenError);
 
     expect(await claimInvites(userId, "DANA@example.com")).toHaveLength(1);
-    expect((await requireMember(userId, id, "leads.read")).memberId).toBe(person.id);
+    expect((await requireMember(userId, id, "leads.read")).memberId).toBe(person?.id);
     expect(await claimInvites(crypto.randomUUID(), "dana@example.com")).toEqual([]);
   });
 
@@ -92,7 +92,7 @@ describe("signing in", () => {
 
   test("client agents never get an email invite", async () => {
     const { id } = await newTenant();
-    expect((await addPerson(id, { name: "Hassan", role: "field_agent", email: "h@example.com" }, "t")).inviteEmail).toBeNull();
+    expect((await addPerson(id, { name: "Hassan", role: "field_agent", email: "h@example.com" }, "t"))?.inviteEmail).toBeNull();
   });
 
   test("people see only the clients they belong to; admins see all", async () => {

@@ -7,26 +7,35 @@ import { draftReply } from "../../../lib/ai/tasks.ts";
 import { action, requireLeadAccess, UserError, type Context } from "../../../lib/auth/action.ts";
 import { logoDataUrl } from "../../../lib/brand.ts";
 import { withTenant } from "../../../lib/db/client.ts";
-import { tenants, type AutomationStep } from "../../../lib/db/schema.ts";
+import { STAGE_KINDS, tenants, type AutomationStep, type Condition, type WorkingHours } from "../../../lib/db/schema.ts";
 import { localToUtc } from "../../../lib/time.ts";
-import { saveConnection } from "../../../lib/intake/meta.ts";
+import { saveConnection, verifyConnection } from "../../../lib/intake/meta.ts";
 import { ingestLead, InvalidLeadError, LeadNotAccessibleError } from "../../../lib/leads/ingest.ts";
 import { bulkUpdateLeads, changeStage, completeTask, createNote, createTask, getTask, importCsv, logCall, saveView, setCustomFields } from "../../../lib/leads/work.ts";
 import { eraseContact } from "../../../lib/privacy.ts";
-import { deliverLead, DeliveryError } from "../../../lib/routing.ts";
+import { deliverLead, DeliveryError, NotRoutableError } from "../../../lib/routing.ts";
 import {
   addPerson,
+  addStage,
   approveAnalysis,
+  deleteCustomField,
   deleteRoutingRule,
+  deleteStage,
   saveAutomation,
+  saveCustomField,
   saveRoutingRule,
+  saveStage,
   sendTestEvent,
   sendTestLead,
   setAutomationActive,
   setBrand,
   setIntakeOrigins,
   setPersonActive,
+  shiftStage,
+  StageError,
+  updatePerson,
   updateStage,
+  updateTenantSettings,
 } from "../../../lib/settings.ts";
 import { createLinkCode } from "../../../lib/telegram/updates.ts";
 import { ROLES } from "../../../lib/db/schema.ts";
@@ -137,11 +146,25 @@ export const setFieldsAction = action("leads.write", z.object({ leadId }).catcha
   return "Saved.";
 });
 
-export const bulkAssignAction = action("leads.write", z.object({ leadIds: z.array(z.uuid()).min(1, "Tick at least one lead."), ownerMemberId: z.uuid("Choose a person.") }), async (data, context) => {
-  for (const id of data.leadIds) await requireLeadAccess(data.tenantId, id, context);
-  await bulkUpdateLeads(data.tenantId, data.leadIds, { ownerMemberId: data.ownerMemberId }, context.actor);
-  return `Assigned ${data.leadIds.length} ${data.leadIds.length === 1 ? "lead" : "leads"}.`;
-});
+export const bulkEditAction = action(
+  "leads.write",
+  z.object({
+    leadIds: z.array(z.uuid()).min(1, "Tick at least one lead."),
+    ownerMemberId: z.union([z.literal(""), z.uuid()]).optional(),
+    stageId: z.union([z.literal(""), z.uuid()]).optional(),
+  }),
+  async (data, context) => {
+    if (!data.ownerMemberId && !data.stageId) throw new UserError("Choose a person or a stage.");
+    for (const id of data.leadIds) await requireLeadAccess(data.tenantId, id, context);
+    try {
+      await bulkUpdateLeads(data.tenantId, data.leadIds, { ownerMemberId: data.ownerMemberId || undefined, stageId: data.stageId || undefined }, context.actor);
+    } catch (error) {
+      if (error instanceof NotRoutableError) throw new UserError(error.message);
+      throw error;
+    }
+    return `Updated ${data.leadIds.length} ${data.leadIds.length === 1 ? "lead" : "leads"}.`;
+  },
+);
 
 export const saveViewAction = action("leads.write", z.object({ name: required("Name the view."), query: z.string() }), async (data, { membership }) => {
   await saveView(data.tenantId, membership.memberId, data.name, { query: data.query });
@@ -172,7 +195,7 @@ export const addPersonAction = action(
   z.object({ name: required("Enter a name."), role: z.enum(ROLES), email: z.union([z.literal(""), z.email("Enter a valid email address.")]).optional(), weight: z.coerce.number().int().min(1).max(10).default(1), recordScope: z.enum(["all", "assigned"]).default("all") }),
   async (data, { actor }) => {
     if (data.role !== "field_agent" && !data.email) throw new UserError("Staff and clients need an email to sign in.");
-    await addPerson(data.tenantId, data, actor);
+    if (!(await addPerson(data.tenantId, data, actor))) throw new UserError("Someone with this email is already waiting to sign in.");
     return `${data.name} added.`;
   },
 );
@@ -181,6 +204,37 @@ export const setPersonActiveAction = action("settings.manage", z.object({ member
   await setPersonActive(data.tenantId, data.memberId, data.active === "true", actor);
   return "Saved.";
 });
+
+const DAYS = [0, 1, 2, 3, 4, 5, 6];
+const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Reads the day rows. Null means always on duty. */
+function readHours(data: Record<string, unknown>): WorkingHours | null {
+  if (data.schedule !== "set") return null;
+  const hours: WorkingHours = {};
+  for (const day of DAYS) {
+    if (data[`on${day}`] !== "on") continue;
+    const from = String(data[`from${day}`] ?? "");
+    const to = String(data[`to${day}`] ?? "");
+    if (!CLOCK.test(from) || !CLOCK.test(to) || from >= to) throw new UserError("Each working day needs a start time before its end time.");
+    hours[day] = { from, to };
+  }
+  return hours;
+}
+
+export const updatePersonAction = action(
+  "settings.manage",
+  z.looseObject({
+    memberId: z.uuid(),
+    weight: z.coerce.number().int().min(1, "Weight starts at 1.").max(10, "Weight stops at 10."),
+    recordScope: z.enum(["all", "assigned"]).default("all"),
+    schedule: z.enum(["always", "set"]).default("always"),
+  }),
+  async (data, { actor }) => {
+    await updatePerson(data.tenantId, data.memberId, { weight: data.weight, recordScope: data.recordScope, workingHours: readHours(data) }, actor);
+    return "Saved.";
+  },
+);
 
 export const linkTelegramAction = action("settings.manage", z.object({ memberId: z.string().optional() }), async (data) => {
   const memberId = data.memberId ? z.uuid().parse(data.memberId) : null;
@@ -192,7 +246,10 @@ export const saveConnectionAction = action(
   "connections.manage",
   z.object({ kind: z.enum(["page", "ad_account", "dataset"]), externalId: required("Enter the ID from Meta."), name: optional, secret: optional, testEventCode: optional }),
   async (data, { actor }) => {
-    await saveConnection(data.tenantId, { ...data, secret: data.secret || undefined, testEventCode: data.testEventCode || undefined }, actor);
+    const externalId = data.kind === "ad_account" && !data.externalId.startsWith("act_") ? `act_${data.externalId}` : data.externalId;
+    const id = await saveConnection(data.tenantId, { ...data, externalId, secret: data.secret || undefined, testEventCode: data.testEventCode || undefined }, actor);
+    const problem = await verifyConnection(data.tenantId, id);
+    if (problem) throw new UserError(`Saved, but Meta refused it, so nothing will arrive yet. ${problem}`);
     return "Connected.";
   },
 );
@@ -265,6 +322,83 @@ export const originsAction = action("settings.manage", z.object({ origins: z.str
   return "Saved.";
 });
 
+const stageChange = (run: () => Promise<unknown>, done: string) =>
+  run().then(
+    () => done,
+    (error) => {
+      if (error instanceof StageError) throw new UserError(error.message);
+      throw error;
+    },
+  );
+
+const stageFields = { name: required("Name the stage."), kind: z.enum(STAGE_KINDS) };
+
+export const saveStageAction = action("settings.manage", z.object({ stageId: z.uuid(), ...stageFields }), (data, { actor }) =>
+  stageChange(() => saveStage(data.tenantId, data.stageId, { name: data.name, kind: data.kind }, actor), "Saved."),
+);
+
+export const addStageAction = action("settings.manage", z.object(stageFields), async (data, { actor }) => {
+  await addStage(data.tenantId, { name: data.name, kind: data.kind }, actor);
+  return `${data.name} added at the end.`;
+});
+
+export const shiftStageAction = action("settings.manage", z.object({ stageId: z.uuid(), direction: z.enum(["up", "down"]) }), (data, { actor }) =>
+  stageChange(() => shiftStage(data.tenantId, data.stageId, data.direction, actor), "Moved."),
+);
+
+export const deleteStageAction = action("settings.manage", z.object({ stageId: z.uuid() }), (data, { actor }) =>
+  stageChange(() => deleteStage(data.tenantId, data.stageId, actor), "Removed."),
+);
+
+const RESERVED_FIELDS = ["meta_answers", "tags", "test"];
+
+export const addFieldAction = action(
+  "settings.manage",
+  z.object({
+    label: required("Name the field."),
+    type: z.enum(["text", "number", "date", "select", "boolean"]),
+    options: z.string().default(""),
+    required: z.enum(["on"]).optional(),
+  }),
+  async (data, { actor }) => {
+    const key = data.label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    if (!key || RESERVED_FIELDS.includes(key)) throw new UserError("Choose a different name for this field.");
+    const options = data.options.split(",").map((option) => option.trim()).filter(Boolean);
+    if (data.type === "select" && !options.length) throw new UserError("List the choices, separated by commas.");
+    const added = await saveCustomField(data.tenantId, { key, label: data.label, type: data.type, options: data.type === "select" ? options : null, required: !!data.required }, actor);
+    if (!added) throw new UserError("A field with this name already exists.");
+    return `${data.label} added.`;
+  },
+);
+
+export const deleteFieldAction = action("settings.manage", z.object({ fieldId: z.uuid() }), async (data, { actor }) => {
+  await deleteCustomField(data.tenantId, data.fieldId, actor);
+  return "Removed.";
+});
+
+const validZone = (zone: string) => {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const clientSettingsAction = action(
+  "settings.manage",
+  z.object({
+    timezone: z.string().trim().refine(validZone, "Use a time zone like Asia/Dubai."),
+    currency: z.string().trim().toUpperCase().length(3, "Use a three-letter currency code, like AED."),
+    retentionDays: z.coerce.number().int().min(30, "Keep leads for at least 30 days.").max(3650, "Ten years is the longest."),
+    aiMonthlyBudgetUsd: z.coerce.number().min(0, "The budget can't be negative.").max(10_000, "Keep the budget under $10,000."),
+  }),
+  async (data, { actor }) => {
+    await updateTenantSettings(data.tenantId, { timezone: data.timezone, currency: data.currency, retentionDays: data.retentionDays, aiMonthlyBudgetUsd: data.aiMonthlyBudgetUsd.toFixed(2) }, actor);
+    return "Saved.";
+  },
+);
+
 // Meta results
 
 export const updateStageAction = action(
@@ -297,7 +431,10 @@ export const saveAutomationAction = action(
     name: required("Name the rule."),
     trigger: z.enum(TRIGGERS),
     triggerStageId: z.string().optional(),
-    days: z.coerce.number().int().min(1).max(365).optional(),
+    days: z.union([z.literal(""), z.coerce.number().int().min(1).max(365)]).optional(),
+    temperature: z.enum(["", "hot", "warm", "cold"]).optional(),
+    assignMemberId: z.union([z.literal(""), z.uuid()]).optional(),
+    tag: optional,
     waitMinutes: z.coerce.number().int().min(0).max(43_200).default(0),
     taskTitle: optional,
     alertText: optional,
@@ -310,14 +447,18 @@ export const saveAutomationAction = action(
       ...(data.taskTitle ? [{ type: "create_task" as const, title: data.taskTitle }] : []),
       ...(data.alertText ? [{ type: "alert" as const, text: data.alertText }] : []),
       ...(data.moveStageId ? [{ type: "move_stage" as const, stageId: z.uuid().parse(data.moveStageId) }] : []),
+      ...(data.assignMemberId ? [{ type: "assign" as const, memberId: data.assignMemberId }] : []),
+      ...(data.tag ? [{ type: "tag" as const, tag: data.tag }] : []),
     ];
+    const conditions: Condition[] = data.temperature ? [{ field: "temperature", op: "eq", value: data.temperature }] : [];
     if (!steps.some((step) => step.type !== "wait")) throw new UserError("Add at least one thing for the rule to do.");
     await saveAutomation(
       data.tenantId,
       {
         name: data.name,
         trigger: data.trigger,
-        triggerConfig: { stageId: data.triggerStageId || undefined, days: data.days },
+        triggerConfig: { stageId: data.trigger === "stage_changed" ? data.triggerStageId || undefined : undefined, days: data.trigger === "no_activity" ? data.days || 3 : undefined },
+        conditions,
         steps,
         exitStageIds: data.exitStageIds,
       },

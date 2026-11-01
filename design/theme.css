@@ -22,6 +22,14 @@
 
 /* `dark:` follows the attribute, so a tenant/user toggle works without media queries. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+/* The full sidebar: wide screens only, and only while it isn't collapsed. */
+@custom-variant full {
+  @media (width >= 87.5rem) {
+    &:where([data-sidebar="open"], [data-sidebar="open"] *) {
+      @slot;
+    }
+  }
+}
 
 /* -----------------------------------------------------------------------------
    1. Tenant brand hook (defaults = Ember orange)
@@ -39,6 +47,23 @@
   --brand-logo: none;               /* url("…") set per tenant */
   --brand-font: var(--font-sans);   /* display/headings only; body font is locked */
 
+  /* Lead temperature fills. Pinned: they never follow a client's brand. Ink label
+     is at least 4.5:1 on every stop. Ember's cold end (#41678f) was lifted for that. */
+  --gradient-hot: linear-gradient(135deg, #ff8a4c, #e8410a);
+  --gradient-warm: linear-gradient(135deg, #e8bd6d, #c98b28);
+  --gradient-cold: linear-gradient(135deg, #7fa3c9, #5f8bb8);
+  --on-temperature: #1a0f0a;
+
+  /* Avatar: the hue is hashed from the name and set on the element as --hue.
+     30% lightness keeps white initials above 4.5:1 for every hue (ui.tsx:47-52). */
+  --on-avatar: #ffffff;
+}
+
+:root,
+[data-theme] {
+  /* Redeclared on [data-theme] on purpose: a custom property's var() resolves where it
+     is declared, so without this the portal's brand override on its wrapper never
+     reaches these and every chart stays Ember orange. */
   /* Non-critical derivations: safe for any brand, so CSS does them. */
   --brand-soft: color-mix(in oklab, var(--brand) 13%, transparent);       /* chip fill   (ui.tsx:311) */
   --brand-line: color-mix(in oklab, var(--brand) 30%, transparent);       /* chip border (ui.tsx:310) */
@@ -50,6 +75,12 @@
       color-mix(in oklab, var(--brand) 30%, transparent) 0%,
       color-mix(in oklab, var(--brand) 7%, transparent) 40%,
       transparent 72%);           /* handoff README.md:71-73 */
+  --wash-soft: radial-gradient(100% 100% at 30% 0%,
+      color-mix(in oklab, var(--brand) 16%, transparent) 0%,
+      transparent 70%);           /* PerfView.tsx:76 */
+  --gradient-highlight: linear-gradient(160deg, color-mix(in oklab, var(--brand) 13%, transparent), transparent); /* DashboardView.tsx:253 */
+  --gradient-row: linear-gradient(120deg, color-mix(in oklab, var(--brand) 14%, transparent), color-mix(in oklab, var(--brand) 3%, transparent)); /* TodayView.tsx:352 */
+  --gradient-nav: linear-gradient(90deg, color-mix(in oklab, var(--brand) 6%, transparent), color-mix(in oklab, var(--brand) 20%, transparent)); /* EmberApp.tsx:509 */
 }
 
 /* -----------------------------------------------------------------------------
@@ -133,6 +164,7 @@
   --elev-modal: 0 30px 80px -30px rgb(0 0 0 / 0.9), inset 0 1px 0 rgb(255 255 255 / 0.1); /* handoff signin card */
   --elev-glow: 0 8px 22px -9px var(--brand-glow);                              /* ui.tsx:237 */
   --elev-glow-lg: 0 10px 26px -8px var(--brand-glow);                          /* handoff .dc.html:133 */
+  --elev-nav: 0 4px 16px -6px color-mix(in oklab, var(--brand) 60%, transparent); /* EmberApp.tsx:515 */
   --elev-live: 0 0 8px 1px rgb(69 192 138 / 0.7);                              /* EmberApp.tsx:628 */
   --scrollbar: #2a2523;                                                          /* handoff .dc.html:16 */
 }
@@ -207,6 +239,7 @@
   --elev-modal: 0 30px 80px -30px rgb(28 24 22 / 0.35);
   --elev-glow: 0 8px 22px -10px color-mix(in oklab, var(--brand) 55%, transparent);
   --elev-glow-lg: 0 10px 26px -10px color-mix(in oklab, var(--brand) 55%, transparent);
+  --elev-nav: 0 4px 14px -8px color-mix(in oklab, var(--brand) 45%, transparent);
   --elev-live: 0 0 6px 1px rgb(29 122 82 / 0.45);
   --scrollbar: #d6cfc9;
 }
@@ -252,7 +285,7 @@
 
 /* Deliberately overrides data-density on touch: 44px+ targets beat density. */
 @media (pointer: coarse) {
-  :root { --control-md: 2.75rem; --control-sm: 2.5rem; --row-h: 3.25rem; }
+  :root { --control-md: 2.75rem; --control-sm: 2.75rem; --row-h: 3.25rem; }
 }
 
 /* -----------------------------------------------------------------------------
@@ -313,6 +346,10 @@
   --color-warm-line: var(--lead-warm-line);
   --color-cold-line: var(--lead-cold-line);
 
+  --color-on-temperature: var(--on-temperature);
+  --color-avatar: hsl(var(--hue) 45% 30%);
+  --color-on-avatar: var(--on-avatar);
+
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -326,6 +363,7 @@
   --shadow-modal: var(--elev-modal);
   --shadow-glow: var(--elev-glow);
   --shadow-glow-lg: var(--elev-glow-lg);
+  --shadow-nav: var(--elev-nav);
   --shadow-live: var(--elev-live);
 
   --font-display: var(--brand-font);

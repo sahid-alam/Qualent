@@ -2,17 +2,21 @@ import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { resolveBrand, type Brand } from "./brand.ts";
 import { GRAPH_URL, hashEmail } from "./capi/send.ts";
 import { decryptSecret } from "./crypto.ts";
-import { withTenant, withUser } from "./db/client.ts";
+import { withTenant, withUser, type Db } from "./db/client.ts";
 import {
   adAnalyses,
   aiModels,
+  aiUsage,
   automationRules,
   connections,
   customFieldDefs,
   leads,
   members,
   pipelines,
+  profiles,
   routingRules,
+  STAGE_KINDS,
+  stageHistory,
   stages,
   tenants,
   type AutomationStep,
@@ -20,6 +24,7 @@ import {
   type Role,
 } from "./db/schema.ts";
 import { ingestLead } from "./leads/ingest.ts";
+import { STATUS_BY_KIND } from "./leads/stage.ts";
 import { assignLead } from "./routing.ts";
 import { telegramConfigured } from "./telegram/api.ts";
 
@@ -32,24 +37,32 @@ export function addPerson(
   input: { name: string; role: Role; email?: string | null; recordScope?: "all" | "assigned"; weight?: number },
   actor: string,
 ) {
+  // Client agents have no login, so no email.
+  const inviteEmail = input.role === "field_agent" ? null : input.email?.trim().toLowerCase() || null;
   return withTenant(
     tenantId,
-    (db) =>
-      db
+    async (db) => {
+      if (inviteEmail) {
+        const [taken] = await db.select({ id: members.id }).from(members).where(eq(members.inviteEmail, inviteEmail));
+        if (taken) return null;
+      }
+      return db
         .insert(members)
-        .values({
-          tenantId,
-          name: input.name,
-          role: input.role,
-          // Client agents have no login, so no email.
-          inviteEmail: input.role === "field_agent" ? null : input.email?.trim().toLowerCase() || null,
-          recordScope: input.recordScope ?? "all",
-          weight: input.weight ?? 1,
-        })
+        .values({ tenantId, name: input.name, role: input.role, inviteEmail, recordScope: input.recordScope ?? "all", weight: input.weight ?? 1 })
         .returning()
-        .then(([row]) => row),
+        .then(([row]) => row);
+    },
     actor,
   );
+}
+
+export function updatePerson(
+  tenantId: string,
+  memberId: string,
+  values: Pick<typeof members.$inferInsert, "weight" | "recordScope" | "workingHours">,
+  actor: string,
+) {
+  return withTenant(tenantId, (db) => db.update(members).set(values).where(eq(members.id, memberId)), actor);
 }
 
 export function setPersonActive(tenantId: string, memberId: string, active: boolean, actor: string) {
@@ -67,14 +80,20 @@ export async function claimInvites(userId: string, verifiedEmail: string) {
   for (const invite of invites) {
     await withTenant(
       invite.tenantId,
-      (db) =>
-        db
+      async (db) => {
+        // Added twice, or added again after leaving: the existing link stands, and sign-in must not fail.
+        const [existing] = await db.select({ id: members.id }).from(members).where(eq(members.userId, userId));
+        if (existing) return;
+        await db
           .update(members)
           .set({ userId, inviteEmail: null })
-          .where(and(eq(members.id, invite.id), isNull(members.userId))),
+          .where(and(eq(members.id, invite.id), isNull(members.userId)));
+      },
       `user:${userId}`,
     );
   }
+  // The first sign-in creates the name shown in the sidebar.
+  await withUser(userId, (db) => db.insert(profiles).values({ id: userId, name: invites[0]?.name ?? email.split("@")[0] }).onConflictDoNothing());
   return invites;
 }
 
@@ -145,12 +164,104 @@ export function updateStage(
   return withTenant(tenantId, (db) => db.update(stages).set(values).where(eq(stages.id, stageId)), actor);
 }
 
+/** A reason written for the person changing the pipeline. */
+export class StageError extends Error {}
+
+/** New leads start in the first stage, so it can't count as a result. */
+async function requireOpenFirstStage(db: Db, pipelineId: string) {
+  const [first] = await db.select().from(stages).where(eq(stages.pipelineId, pipelineId)).orderBy(asc(stages.position)).limit(1);
+  if (first?.kind !== "open") throw new StageError("The first stage has to be an open one, because new leads start there.");
+}
+
+export function saveStage(tenantId: string, stageId: string, input: { name: string; kind: (typeof STAGE_KINDS)[number] }, actor: string) {
+  return withTenant(
+    tenantId,
+    async (db) => {
+      const [stage] = await db.update(stages).set(input).where(eq(stages.id, stageId)).returning();
+      if (!stage) throw new StageError("That stage no longer exists.");
+      await requireOpenFirstStage(db, stage.pipelineId);
+      // Leads already here follow the stage's new meaning, so reports stay right.
+      await db.update(leads).set({ status: STATUS_BY_KIND[stage.kind] }).where(eq(leads.stageId, stageId));
+    },
+    actor,
+  );
+}
+
+export function addStage(tenantId: string, input: { name: string; kind: (typeof STAGE_KINDS)[number] }, actor: string) {
+  return withTenant(
+    tenantId,
+    async (db) => {
+      const [pipeline] = await db.select().from(pipelines).where(eq(pipelines.isDefault, true)).limit(1);
+      const [{ next }] = await db.select({ next: sql<number>`coalesce(max(${stages.position}), -1)::int + 1` }).from(stages).where(eq(stages.pipelineId, pipeline.id));
+      await db.insert(stages).values({ tenantId, pipelineId: pipeline.id, position: next, capiEventName: input.name, ...input });
+    },
+    actor,
+  );
+}
+
+/** Swaps with the neighbour. Every drag on this list has this as its keyboard version. */
+export function shiftStage(tenantId: string, stageId: string, direction: "up" | "down", actor: string) {
+  return withTenant(
+    tenantId,
+    async (db) => {
+      const [stage] = await db.select().from(stages).where(eq(stages.id, stageId));
+      if (!stage) throw new StageError("That stage no longer exists.");
+      const all = await db.select().from(stages).where(eq(stages.pipelineId, stage.pipelineId)).orderBy(asc(stages.position));
+      const neighbour = all[all.findIndex((row) => row.id === stageId) + (direction === "up" ? -1 : 1)];
+      if (!neighbour) return;
+      // Positions are unique, so one needs parking while they swap.
+      await db.update(stages).set({ position: -1 }).where(eq(stages.id, stage.id));
+      await db.update(stages).set({ position: stage.position }).where(eq(stages.id, neighbour.id));
+      await db.update(stages).set({ position: neighbour.position }).where(eq(stages.id, stage.id));
+      await requireOpenFirstStage(db, stage.pipelineId);
+    },
+    actor,
+  );
+}
+
+/** Only a stage nothing depends on, so history, reports and Meta events keep their meaning. */
+export function deleteStage(tenantId: string, stageId: string, actor: string) {
+  return withTenant(
+    tenantId,
+    async (db) => {
+      const [{ used }] = await db.select({ used: sql<number>`count(*)::int` }).from(stageHistory).where(eq(stageHistory.stageId, stageId));
+      if (used) throw new StageError("Leads have been through this stage, so it stays for their history. You can rename it.");
+      const rules = await db.select().from(automationRules);
+      if (rules.some((rule) => JSON.stringify([rule.triggerConfig, rule.steps, rule.exitStageIds]).includes(stageId))) {
+        throw new StageError("An automation uses this stage. Change that rule first.");
+      }
+      const [stage] = await db.delete(stages).where(eq(stages.id, stageId)).returning();
+      if (stage) await requireOpenFirstStage(db, stage.pipelineId);
+    },
+    actor,
+  );
+}
+
 export function listCustomFields(tenantId: string) {
   return withTenant(tenantId, (db) => db.select().from(customFieldDefs).orderBy(asc(customFieldDefs.label)));
 }
 
 export function saveCustomField(tenantId: string, input: Omit<typeof customFieldDefs.$inferInsert, "tenantId" | "id">, actor: string) {
-  return withTenant(tenantId, (db) => db.insert(customFieldDefs).values({ tenantId, ...input }), actor);
+  return withTenant(tenantId, (db) => db.insert(customFieldDefs).values({ tenantId, ...input }).onConflictDoNothing().returning({ id: customFieldDefs.id }).then(([row]) => !!row), actor);
+}
+
+/** Values already on leads stay in place, and come back if the field does. */
+export function deleteCustomField(tenantId: string, id: string, actor: string) {
+  return withTenant(tenantId, (db) => db.delete(customFieldDefs).where(eq(customFieldDefs.id, id)), actor);
+}
+
+export function updateTenantSettings(tenantId: string, values: Pick<typeof tenants.$inferInsert, "timezone" | "currency" | "retentionDays" | "aiMonthlyBudgetUsd">, actor: string) {
+  return withTenant(tenantId, (db) => db.update(tenants).set(values).where(eq(tenants.id, tenantId)), actor);
+}
+
+export function aiSpendThisMonth(tenantId: string) {
+  return withTenant(tenantId, (db) =>
+    db
+      .select({ spent: sql<string>`coalesce(sum(${aiUsage.costUsd}), 0)` })
+      .from(aiUsage)
+      .where(sql`${aiUsage.at} >= date_trunc('month', now())`)
+      .then(([row]) => Number(row.spent)),
+  );
 }
 
 export function setBrand(tenantId: string, input: { name?: string; color?: string; logo?: string }, actor: string) {
@@ -185,8 +296,14 @@ export function setupStatus(tenantId: string) {
       return broken ? { state: "problem" as const, detail: broken.lastError } : { state: "done" as const, detail: found[0].name ?? found[0].externalId };
     };
     const agents = people.filter((person) => person.role === "field_agent");
+    const account = allConnections.find((row) => row.kind === "ad_account")?.config as { currency?: string; timezone?: string } | undefined;
+    const mismatch = [
+      account?.currency && account.currency !== tenant.currency ? `reports in ${account.currency}, this client uses ${tenant.currency}` : null,
+      account?.timezone && account.timezone !== tenant.timezone ? `runs on ${account.timezone}, this client is on ${tenant.timezone}` : null,
+    ].filter(Boolean);
     return {
       tenant,
+      adAccountWarning: mismatch.length ? `This ad account ${mismatch.join(" and ")}. Spend won't line up with leads.` : null,
       connections: allConnections,
       page: connection("page"),
       dataset: connection("dataset"),
@@ -226,6 +343,7 @@ export async function sendTestLead(tenantId: string, actor: string) {
 
 /** A fake event with a test code, so it never counts as a live result. */
 export async function sendTestEvent(tenantId: string, code: string) {
+  if (process.env.VERCEL_ENV === "production") return { ok: false, message: "Test events only run on staging, so they can't affect live ads." };
   const dataset = await withTenant(tenantId, (db) =>
     db.select().from(connections).where(eq(connections.kind, "dataset")).then(([row]) => row),
   );

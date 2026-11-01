@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { draftReplyAction, logCallAction } from "../app/c/[tenantId]/actions";
+import { useState, type ReactNode } from "react";
+import { addNoteAction, draftReplyAction, logCallAction } from "../app/c/[tenantId]/actions";
 import { ActionForm, CopyButton, Submit } from "./forms";
 import { buttonClass, cx, textareaClass } from "./ui";
 
@@ -13,7 +13,7 @@ const OUTCOMES = [
 ] as const;
 
 /** Two clicks: choose the result, save. The note is optional. */
-export function LogCall({ tenantId, leadId }: { tenantId: string; leadId: string }) {
+export function LogCall({ tenantId, leadId, after }: { tenantId: string; leadId: string; after?: ReactNode }) {
   return (
     <ActionForm action={logCallAction} hidden={{ tenantId, leadId }} className="grid gap-2.5" resetOnOk>
       <fieldset className="flex flex-wrap gap-2">
@@ -27,7 +27,10 @@ export function LogCall({ tenantId, leadId }: { tenantId: string; leadId: string
       </fieldset>
       <label className="sr-only" htmlFor="call-note">Note</label>
       <textarea id="call-note" name="note" rows={2} placeholder="Add a note if useful" className={textareaClass} />
-      <div><Submit size="sm">Log call</Submit></div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Submit>Log call</Submit>
+        {after}
+      </div>
     </ActionForm>
   );
 }
@@ -44,7 +47,7 @@ export function ReplyDraft({ tenantId, leadId, phone }: { tenantId: string; lead
           if (typeof result.data?.reply === "string") setReply(result.data.reply);
         }}
       >
-        <Submit variant="secondary" size="sm">Draft a reply</Submit>
+        <Submit variant="secondary" size="sm">{reply ? "Draft again" : "Draft a reply"}</Submit>
       </ActionForm>
       {reply && (
         <>
@@ -60,6 +63,42 @@ export function ReplyDraft({ tenantId, leadId, phone }: { tenantId: string; lead
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** The box under the timeline. Panels stay mounted so half-typed text survives a tab change. */
+export function Composer({ tenantId, leadId, phone, canDraft, next }: { tenantId: string; leadId: string; phone: string | null; canDraft: boolean; next?: ReactNode }) {
+  const tabs = [["call", "Log a call"], ["note", "Add a note"], ...(canDraft ? [["draft", "Draft a reply"]] : [])];
+  const [tab, setTab] = useState("call");
+  return (
+    <div className="grid gap-3 rounded-card border border-line-strong bg-inner p-3.5">
+      <div role="tablist" aria-label="Add to this lead" className="flex flex-wrap gap-1">
+        {tabs.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={tab === value}
+            onClick={() => setTab(value)}
+            className={cx("h-7.75 rounded-full px-3.5 text-xs font-medium pointer-coarse:h-11", tab === value ? "bg-inverse text-on-inverse" : "text-fg-muted hover:text-fg")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div hidden={tab !== "call"}><LogCall tenantId={tenantId} leadId={leadId} after={next} /></div>
+      <div hidden={tab !== "note"}>
+        <ActionForm action={addNoteAction} hidden={{ tenantId, leadId }} className="grid gap-2.5" resetOnOk>
+          <label className="sr-only" htmlFor="note">Add a note</label>
+          <textarea id="note" name="body" rows={2} placeholder="Add a note. Paste only what the lead wrote, not other people's details." className={textareaClass} />
+          <div className="flex flex-wrap items-center gap-3">
+            <Submit>Add note</Submit>
+            {next}
+          </div>
+        </ActionForm>
+      </div>
+      {canDraft && <div hidden={tab !== "draft"}><ReplyDraft tenantId={tenantId} leadId={leadId} phone={phone} /></div>}
     </div>
   );
 }

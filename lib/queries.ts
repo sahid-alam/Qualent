@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { withTenant } from "./db/client.ts";
 import { adInsightsDaily, contacts, leads, members, stages, touches } from "./db/schema.ts";
 import type { Membership } from "./permissions.ts";
@@ -72,4 +72,55 @@ export function listBoard(tenantId: string, membership: Pick<Membership, "member
 
 export function countByStatus(tenantId: string) {
   return withTenant(tenantId, (db) => db.select({ status: leads.status, count: count() }).from(leads).groupBy(leads.status));
+}
+
+type Scope = Pick<Membership, "memberId" | "recordScope">;
+
+const ownLeads = (scope: Scope) => (scope.recordScope === "assigned" ? eq(leads.ownerMemberId, scope.memberId ?? "") : undefined);
+
+/** Nobody has called, noted or delivered yet, or delivery failed and it came back to us. */
+const NEEDS_YOU = sql`(${leads.status} = 'open' and ((${leads.firstResponseAt} is null and ${leads.deliveredAt} is null) or ${leads.deliveryFailedAt} is not null))`;
+const WAITING = sql`(${leads.status} = 'open' and not ((${leads.firstResponseAt} is null and ${leads.deliveredAt} is null) or ${leads.deliveryFailedAt} is not null))`;
+const RECENT = sql`now() - interval '7 days'`;
+
+export type QueueTab = "needs" | "waiting" | "done";
+
+const TAB_WHERE: Record<QueueTab, SQL | undefined> = {
+  needs: NEEDS_YOU,
+  waiting: WAITING,
+  done: and(ne(leads.status, "open"), gt(leads.updatedAt, RECENT)),
+};
+
+export function queueCounts(tenantId: string, scope: Scope) {
+  const needing = (extra: SQL) => sql<number>`count(*) filter (where ${NEEDS_YOU} and ${extra})::int`;
+  return withTenant(tenantId, async (db) => {
+    const [row] = await db
+      .select({
+        needs: sql<number>`count(*) filter (where ${NEEDS_YOU})::int`,
+        hot: needing(sql`${leads.temperature} = 'hot'`),
+        warm: needing(sql`${leads.temperature} = 'warm'`),
+        cold: needing(sql`${leads.temperature} = 'cold'`),
+        unscored: needing(sql`${leads.temperature} is null`),
+        waiting: sql<number>`count(*) filter (where ${WAITING})::int`,
+        done: sql<number>`count(*) filter (where ${TAB_WHERE.done})::int`,
+        unowned: sql<number>`count(*) filter (where ${leads.status} = 'open' and ${leads.ownerMemberId} is null)::int`,
+      })
+      .from(leads)
+      .where(ownLeads(scope));
+    return row;
+  });
+}
+
+/** Highest score first, then whoever has waited longest. */
+export function listQueue(tenantId: string, scope: Scope, options: { tab?: QueueTab; temperature?: "hot" | "warm" | "cold"; limit?: number } = {}) {
+  return withTenant(tenantId, async (db) => {
+    const rows = await db
+      .select({ lead: leads, contact: contacts })
+      .from(leads)
+      .innerJoin(contacts, eq(contacts.id, leads.contactId))
+      .where(and(ownLeads(scope), TAB_WHERE[options.tab ?? "needs"], options.temperature ? eq(leads.temperature, options.temperature) : undefined))
+      .orderBy(sql`${leads.score} desc nulls last`, asc(leads.createdAt))
+      .limit(options.limit ?? 100);
+    return withFirstTouch(tenantId, rows);
+  });
 }

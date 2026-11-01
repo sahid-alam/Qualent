@@ -1,13 +1,15 @@
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import Papa from "papaparse";
 import { withTenant, type Db } from "../db/client.ts";
-import { activities, contacts, customFieldDefs, leads, savedViews, stages, tasks, touches } from "../db/schema.ts";
+import { activities, auditLog, contacts, customFieldDefs, leads, savedViews, stages, tasks, touches } from "../db/schema.ts";
 import { enqueue } from "../jobs/queues.ts";
 import type { Membership } from "../permissions.ts";
+import { assignByHand } from "../routing.ts";
 import { addNote, ingestLead, InvalidLeadError, LeadNotAccessibleError } from "./ingest.ts";
 import { moveStage } from "./stage.ts";
 
 const RESCORE_DEBOUNCE_SECONDS = 120;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const rescore = (db: Db, tenantId: string, leadId: string) =>
   enqueue(db, "ai", { type: "lead_insights", tenantId, leadId }, { singletonKey: `insights:${leadId}`, singletonSeconds: RESCORE_DEBOUNCE_SECONDS });
@@ -63,7 +65,7 @@ export function completeTask(tenantId: string, taskId: string, actor: string) {
 }
 
 /** Overdue and due today, in the tenant's time zone. */
-export function todayTasks(tenantId: string, timezone: string, memberId: string | null, now = new Date()) {
+export function todayTasks(tenantId: string, timezone: string, memberId: string | null, now = new Date(), ownLeadsOnly = false) {
   return withTenant(tenantId, (db) =>
     db
       .select({ task: tasks, leadName: contacts.name })
@@ -74,6 +76,8 @@ export function todayTasks(tenantId: string, timezone: string, memberId: string 
         and(
           isNull(tasks.doneAt),
           memberId ? eq(tasks.assigneeMemberId, memberId) : undefined,
+          // A task on someone else's lead must not reveal that lead to staff limited to their own.
+          ownLeadsOnly && memberId ? eq(leads.ownerMemberId, memberId) : undefined,
           sql`${tasks.dueAt} < (date_trunc('day', ${now.toISOString()}::timestamptz at time zone ${timezone}) + interval '1 day') at time zone ${timezone}`,
         ),
       )
@@ -96,6 +100,29 @@ export type LeadFilters = {
   page?: number;
   pageSize?: number;
 };
+
+/** Reads filters from a page's query string, so the table, its export and saved views all agree. */
+export function filtersFromQuery(search: Record<string, string | undefined>, defs: FieldDef[] = []): LeadFilters {
+  const custom = Object.fromEntries(
+    defs.flatMap((def) => {
+      const value = coerceField(def, search[`f_${def.key}`]);
+      return value === null ? [] : [[def.key, value]];
+    }),
+  );
+  const uuid = (value: string | undefined) => (value && UUID.test(value) ? value : undefined);
+  const stage = uuid(search.stage);
+  return {
+    search: search.q || undefined,
+    stageIds: stage ? [stage] : undefined,
+    temperature: (["hot", "warm", "cold"] as const).find((value) => value === search.temperature),
+    status: (["open", "won", "lost"] as const).find((value) => value === search.status),
+    ownerMemberId: uuid(search.owner),
+    unassigned: search.unassigned === "1",
+    sort: (["created", "score", "updated"] as const).find((value) => value === search.sort),
+    custom: Object.keys(custom).length ? custom : undefined,
+    page: Math.max(1, Math.floor(Number(search.page)) || 1),
+  };
+}
 
 function leadConditions(filters: LeadFilters, membership: Pick<Membership, "memberId" | "recordScope">) {
   const conditions: (SQL | undefined)[] = [
@@ -128,7 +155,8 @@ export function listLeads(tenantId: string, filters: LeadFilters, membership: Pi
       .innerJoin(contacts, eq(contacts.id, leads.contactId))
       .innerJoin(stages, eq(stages.id, leads.stageId))
       .where(where)
-      .orderBy(filters.direction === "asc" ? asc(sortColumn) : sql`${sortColumn} desc nulls last`)
+      // The id makes the order total, so paging never repeats or skips a lead.
+      .orderBy(filters.direction === "asc" ? asc(sortColumn) : sql`${sortColumn} desc nulls last`, asc(leads.id))
       .limit(pageSize)
       .offset(((filters.page ?? 1) - 1) * pageSize);
     const [{ total }] = await db
@@ -167,7 +195,7 @@ export function bulkUpdateLeads(
     tenantId,
     async (db) => {
       if (change.ownerMemberId) {
-        await db.update(leads).set({ ownerMemberId: change.ownerMemberId, updatedAt: sql`now()` }).where(inArray(leads.id, leadIds));
+        for (const leadId of leadIds) await assignByHand(db, tenantId, leadId, change.ownerMemberId, actor);
       }
       if (change.stageId) {
         for (const leadId of leadIds) await moveStage(db, tenantId, leadId, change.stageId, actor);
@@ -188,6 +216,14 @@ export function listViews(tenantId: string, memberId: string) {
 }
 
 type FieldDef = typeof customFieldDefs.$inferSelect;
+
+/** Forms send text. Stored values keep their real type, or number and yes/no filters never match. */
+export function coerceField(def: FieldDef, value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  if (def.type === "number" && Number.isFinite(Number(value))) return Number(value);
+  if (def.type === "boolean" && (value === "true" || value === "false")) return value === "true";
+  return value;
+}
 
 /** Returns the error for one field, or null. */
 export function fieldError(def: FieldDef, value: unknown) {
@@ -213,9 +249,10 @@ export function setCustomFields(tenantId: string, leadId: string, values: Record
       const defs = await db.select().from(customFieldDefs);
       const known = new Map(defs.map((def) => [def.key, def]));
       const unknown = Object.keys(values).filter((key) => !known.has(key));
+      const coerced = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, known.has(key) ? coerceField(known.get(key)!, value) : value]));
       const errors = [
         ...unknown.map((key) => `Unknown field: ${key}`),
-        ...Object.entries(values).flatMap(([key, value]) => {
+        ...Object.entries(coerced).flatMap(([key, value]) => {
           const def = known.get(key);
           const error = def ? fieldError(def, value) : null;
           return error ? [error] : [];
@@ -224,7 +261,7 @@ export function setCustomFields(tenantId: string, leadId: string, values: Record
       if (errors.length) return { errors };
       await db
         .update(leads)
-        .set({ custom: sql`${leads.custom} || ${JSON.stringify(values)}::jsonb`, updatedAt: sql`now()` })
+        .set({ custom: sql`${leads.custom} || ${JSON.stringify(coerced)}::jsonb`, updatedAt: sql`now()` })
         .where(eq(leads.id, leadId));
       return { errors: [] };
     },
@@ -274,8 +311,17 @@ export function safeCell(value: string | number | null | undefined) {
   return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
 }
 
-export async function exportCsv(tenantId: string, filters: LeadFilters, membership: Pick<Membership, "memberId" | "recordScope">) {
-  const { rows } = await listLeads(tenantId, { ...filters, pageSize: 200 }, membership);
+const EXPORT_PAGE = 200;
+
+/** Every matching lead, not just one page. Exports are audited, because they take personal data out. */
+export async function exportCsv(tenantId: string, filters: LeadFilters, membership: Pick<Membership, "memberId" | "recordScope">, actor: string) {
+  const rows: Awaited<ReturnType<typeof listLeads>>["rows"] = [];
+  for (let page = 1; ; page++) {
+    const batch = await listLeads(tenantId, { ...filters, page, pageSize: EXPORT_PAGE }, membership);
+    rows.push(...batch.rows);
+    if (batch.rows.length < EXPORT_PAGE) break;
+  }
+  await withTenant(tenantId, (db) => db.insert(auditLog).values({ tenantId, actor, action: "export", tableName: "leads", rowId: `${rows.length} rows` }));
   return Papa.unparse(
     rows.map(({ lead, contact, stage }) => ({
       name: safeCell(contact.name),

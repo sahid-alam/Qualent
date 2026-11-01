@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { safeMessage } from "../errors.ts";
+import { reportError } from "../sentry.ts";
 import { getLead } from "../leads/work.ts";
 import { ForbiddenError, requireMember, type Action, type Membership } from "../permissions.ts";
 import { requireUserId } from "./session.ts";
@@ -15,7 +16,7 @@ export type Context = { actor: string; membership: Membership; userId: string };
 
 const withTenantId = z.object({ tenantId: z.uuid() });
 
-function readForm(form: FormData) {
+export function readForm(form: FormData) {
   const values: Record<string, unknown> = {};
   for (const key of new Set(form.keys())) {
     const all = form.getAll(key);
@@ -51,6 +52,7 @@ export function action<S extends z.ZodObject>(
       if (error instanceof UserError) return { error: error.message };
       if (error instanceof ForbiddenError) return { error: "You don't have permission to do that." };
       console.error(`action failed: ${safeMessage(error)}`);
+      await reportError(error, "action");
       return { error: "That didn't save. Try again." };
     }
   };

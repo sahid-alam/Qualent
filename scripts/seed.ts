@@ -98,6 +98,8 @@ type Row = {
 const ROWS: Row[] = [
   { name: "Omar Ali", phone: "+971501234567", campaign: "marina", score: 91, temp: "hot", summary: "Ready to view this week, budget 2M for two bedrooms.", next: "Call and offer a Friday viewing.", note: "budget: 2M\nbedrooms: 2", assign: true },
   { name: "Lina Mansour", phone: "+971502223344", campaign: "downtown", source: "landing_page", score: 88, temp: "hot", summary: "Wants a Downtown flat before year end.", next: "Send the Downtown list.", note: "Looking for a flat near the metro." },
+  { name: "Noura Khalil", phone: "+971502345671", campaign: "marina", score: 67, temp: "warm", summary: "Comparing Marina and JBR, no budget yet.", next: "Ask about budget on the first call." },
+  { name: "Sam Pereira", phone: "+971502345672", campaign: "downtown", score: 38, temp: "cold", summary: "Asked about rentals only." },
   { name: "Rami Ahmed", phone: "+971503334455", source: "manual", note: "Messaged on WhatsApp about Marina villas." },
   { name: "Priya Sharma", phone: "+971504445566", campaign: "marina", stage: "Viewing", score: 74, temp: "warm", summary: "Viewing booked, comparing two towers.", next: "Confirm the viewing time.", assign: true, deliver: true },
   { name: "Yousef Haddad", phone: "+971505556677", campaign: "marina", stage: "Contacted", score: 62, temp: "warm", assign: true },
@@ -109,6 +111,7 @@ const ROWS: Row[] = [
 ];
 
 let first: string | undefined;
+const leadIds: string[] = [];
 for (const [index, row] of ROWS.entries()) {
   const { leadId } = await ingestLead(id, {
     source: row.source ?? (index % 2 ? "landing_page" : "meta_form"),
@@ -125,6 +128,7 @@ for (const [index, row] of ROWS.entries()) {
     actor: "seed",
   });
   first ??= leadId;
+  leadIds.push(leadId);
   if (row.score) {
     await withTenant(id, (db) =>
       db
@@ -136,18 +140,25 @@ for (const [index, row] of ROWS.entries()) {
   if (row.assign) await assignLead(id, leadId);
   if (row.stage) await changeStage(id, leadId, await stageId(row.stage), "seed");
   if (row.deliver) await deliverLead(id, leadId, hassan.id, "seed");
+  // Spread arrival times over the week. Anyone past the first stage has had a reply.
+  const createdAt = new Date(Date.now() - [0.3, 0.8, 3, 5, 8, 26, 50, 70, 74, 96, 120, 150][index] * 3_600_000);
+  await withTenant(id, (db) =>
+    db
+      .update(leads)
+      .set({ createdAt, firstResponseAt: row.stage ? new Date(createdAt.getTime() + (index + 2) * 7 * 60_000) : null })
+      .where(eq(leads.id, leadId)),
+  );
 }
 
 const addDays = (days: number) => new Date(Date.now() + days * 86_400_000);
-const allLeads = await withTenant(id, (db) => db.select().from(leads));
 await withTenant(id, async (db) => {
   await db.insert(tasks).values([
-    { tenantId: id, leadId: allLeads[3].id, assigneeMemberId: dana.id, title: "Call back Priya about the second tower", dueAt: addDays(-2) },
-    { tenantId: id, leadId: allLeads[0].id, assigneeMemberId: dana.id, title: "Send Omar the villa list", dueAt: addDays(0) },
-    { tenantId: id, leadId: allLeads[5].id, assigneeMemberId: sara.id, title: "Confirm Maya's handover date", dueAt: addDays(0) },
-    { tenantId: id, leadId: allLeads[4].id, assigneeMemberId: dana.id, title: "Follow up with Yousef", dueAt: addDays(3) },
+    { tenantId: id, leadId: leadIds[5], assigneeMemberId: dana.id, title: "Call back Priya about the second tower", dueAt: addDays(-2) },
+    { tenantId: id, leadId: leadIds[0], assigneeMemberId: dana.id, title: "Send Omar the villa list", dueAt: addDays(0) },
+    { tenantId: id, leadId: leadIds[7], assigneeMemberId: sara.id, title: "Confirm Maya's handover date", dueAt: addDays(0) },
+    { tenantId: id, leadId: leadIds[6], assigneeMemberId: dana.id, title: "Follow up with Yousef", dueAt: addDays(3) },
   ]);
-  await db.insert(activities).values({ tenantId: id, leadId: allLeads[3].id, kind: "call", body: "Wants to see both towers.", data: { outcome: "reached" }, actor: "Dana" });
+  await db.insert(activities).values({ tenantId: id, leadId: leadIds[5], kind: "call", body: "Wants to see both towers.", data: { outcome: "reached" }, actor: "Dana" });
 
   const today = new Date();
   const spend = [

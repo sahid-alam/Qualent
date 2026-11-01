@@ -1,29 +1,16 @@
 import Link from "next/link";
 import { guardPage } from "../../../../lib/auth/session.ts";
-import { listLeads, listViews, type LeadFilters } from "../../../../lib/leads/work.ts";
+import { filtersFromQuery, listLeads, listViews } from "../../../../lib/leads/work.ts";
 import { listCampaigns, listRoutableMembers } from "../../../../lib/queries.ts";
-import { listPipelines } from "../../../../lib/settings.ts";
+import { listCustomFields, listPipelines } from "../../../../lib/settings.ts";
 import { AddLead } from "../../../../components/add-lead";
 import { ActionForm, Dialog, SelectAll, Submit } from "../../../../components/forms";
-import { buttonClass, Empty, Field, inlineFieldClass, inputClass, LinkButton, PageHeader, Pill, TableWrap, Temperature, timeAgo } from "../../../../components/ui";
-import { bulkAssignAction, importCsvAction, saveViewAction } from "../actions";
+import { buttonClass, Empty, Field, inlineFieldClass, inputClass, LinkButton, PageHeader, PersonLink, Pill, TableWrap, Temperature, timeAgo } from "../../../../components/ui";
+import { bulkEditAction, importCsvAction, saveViewAction } from "../actions";
 
 export const metadata = { title: "All leads · Qualent" };
 
 type Search = Record<string, string | undefined>;
-
-function filtersFrom(search: Search): LeadFilters {
-  return {
-    search: search.q || undefined,
-    stageIds: search.stage ? [search.stage] : undefined,
-    temperature: (["hot", "warm", "cold"] as const).find((value) => value === search.temperature),
-    status: (["open", "won", "lost"] as const).find((value) => value === search.status),
-    ownerMemberId: search.owner || undefined,
-    unassigned: search.unassigned === "1",
-    sort: (["created", "score", "updated"] as const).find((value) => value === search.sort),
-    page: Number(search.page) || 1,
-  };
-}
 
 const selectClass = `${inlineFieldClass} min-w-32`;
 
@@ -31,7 +18,8 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
   const { tenantId } = await params;
   const search = await searchParams;
   const { membership, can } = await guardPage(tenantId, "leads.read");
-  const filters = filtersFrom(search);
+  const fields = await listCustomFields(tenantId);
+  const filters = filtersFromQuery(search, fields);
   const [{ rows, total, pageSize }, pipelines, people, campaigns, views] = await Promise.all([
     listLeads(tenantId, filters, membership),
     listPipelines(tenantId),
@@ -102,6 +90,24 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
           <option value="score" className="bg-panel">Highest score</option>
           <option value="updated" className="bg-panel">Recently updated</option>
         </select>
+        {fields.map((field) => {
+          const id = `f_${field.key}`;
+          return (
+            <span key={field.id} className="contents">
+              <label className="sr-only" htmlFor={id}>{field.label}</label>
+              {field.type === "select" || field.type === "boolean" ? (
+                <select id={id} name={id} defaultValue={search[id] ?? ""} className={selectClass}>
+                  <option value="" className="bg-panel">{field.label}: any</option>
+                  {field.type === "boolean"
+                    ? [["true", "Yes"], ["false", "No"]].map(([value, label]) => <option key={value} value={value} className="bg-panel">{field.label}: {label}</option>)
+                    : field.options?.map((option) => <option key={option} value={option} className="bg-panel">{option}</option>)}
+                </select>
+              ) : (
+                <input id={id} name={id} type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"} defaultValue={search[id]} placeholder={field.label} className={selectClass} />
+              )}
+            </span>
+          );
+        })}
         <button className={buttonClass("secondary")}>Apply</button>
         {query && <LinkButton variant="ghost" href={base}>Clear</LinkButton>}
       </form>
@@ -118,7 +124,7 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
       {!rows.length ? (
         <Empty title={query ? "No leads match these filters" : "No leads yet"} body={query ? "Try removing a filter." : "Add one by hand, import a CSV, or connect a lead source in Client setup."} />
       ) : (
-        <ActionForm action={bulkAssignAction} hidden={{ tenantId }} className="grid gap-3" resetOnOk>
+        <ActionForm action={bulkEditAction} hidden={{ tenantId }} className="grid gap-3" resetOnOk>
           <TableWrap>
             <thead>
               <tr>
@@ -126,7 +132,7 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
                 <th>Name</th>
                 <th>Phone</th>
                 <th>Stage</th>
-                <th>AI</th>
+                <th>Score</th>
                 <th>Owner</th>
                 <th className="num">Added</th>
               </tr>
@@ -136,7 +142,7 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
                 <tr key={lead.id} className="hover:bg-hover">
                   <td><input type="checkbox" name="leadIds[]" value={lead.id} aria-label={`Select ${contact.name ?? "lead"}`} className="size-4 accent-(--accent)" /></td>
                   <td>
-                    <Link href={`${base}/${lead.id}`} className="font-medium hover:underline">{contact.name ?? contact.email ?? "Unknown"}</Link>
+                    <PersonLink href={`${base}/${lead.id}`} name={contact.name ?? contact.email ?? "Unknown"} />
                     {lead.needsReview && <span className="ms-2"><Pill tone="warn">Check duplicate</Pill></span>}
                   </td>
                   <td dir="ltr" className="text-fg-soft tabular-nums">{contact.phoneE164 ?? contact.phoneRaw ?? "—"}</td>
@@ -155,7 +161,12 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
                 <option value="" className="bg-panel">Assign ticked leads to…</option>
                 {people.map((person) => <option key={person.id} value={person.id} className="bg-panel">{person.name}</option>)}
               </select>
-              <Submit variant="secondary">Assign</Submit>
+              <label className="sr-only" htmlFor="bulk-stage">Move to</label>
+              <select id="bulk-stage" name="stageId" defaultValue="" className={`${inlineFieldClass} max-w-60`}>
+                <option value="" className="bg-panel">Move ticked leads to…</option>
+                {stages.map((stage) => <option key={stage.id} value={stage.id} className="bg-panel">{stage.name}</option>)}
+              </select>
+              <Submit variant="secondary">Apply to ticked</Submit>
             </div>
             <div className="flex items-center gap-2 text-sm text-fg-muted">
               {page > 1 && <LinkButton size="sm" href={`${base}?${query}&page=${page - 1}`}>Previous</LinkButton>}

@@ -454,7 +454,7 @@ Jobs are added inside the same database transaction as the data change, so we ne
 5. Move queues to BullMQ with Redis if pg-boss becomes the bottleneck. **Ceiling:** pg-boss adds load on the main database. All app code uses Supabase's transaction pooler [UNVERIFIED with pg-boss; test early].
 
 **Monitoring:**
-- Sentry for errors, without personal data.
+- Sentry for errors, without personal data. Sent over its HTTP API, because its SDK installs a CLI under a license we don't allow.
 - External uptime checks on web and webhook routes. Each scheduled tick writes a heartbeat row, and `/api/health` fails if it is over 20 minutes old.
 - Internal health page: webhook-to-alert time, queue depth, dead letters, Meta events failed or expired, Telegram failures, AI spend, and token expiry per connection.
 - Critical alerts go to a 7Gence ops Telegram group.

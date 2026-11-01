@@ -1,9 +1,10 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, type SQL } from "drizzle-orm";
 import { GRAPH_URL } from "./capi/send.ts";
 import { decryptSecret } from "./crypto.ts";
 import { withTenant } from "./db/client.ts";
 import { adInsightsDaily, connections } from "./db/schema.ts";
 import { alertOps } from "./ops.ts";
+import type { Membership } from "./permissions.ts";
 import { getTenant } from "./tenants.ts";
 
 type Insight = {
@@ -75,6 +76,10 @@ export async function syncSpend(tenantId: string, days = 3) {
 
 const MANUAL = "__manual__";
 
+/** Report dates are the client's calendar days, so a lead at 01:00 in Dubai counts on that day. */
+const inRange = (column: SQL, tenantId: string, from: string, to: string) =>
+  sql`(${column} at time zone (select timezone from tenants where id = ${tenantId}::uuid))::date between ${from}::date and ${to}::date`;
+
 /**
  * Leads, qualified, deals and cost per campaign. Numbers only, safe for clients.
  * Leads with no campaign id, or typed in by hand, are grouped and labeled as manual.
@@ -95,7 +100,7 @@ export async function campaignReport(tenantId: string, from: string, to: string)
         ))::int as qualified,
         count(*) filter (where l.status = 'won')::int as won
       from leads l join first_touch t on t.lead_id = l.id
-      where l.created_at >= ${from}::date and l.created_at < ${to}::date + 1
+      where ${inRange(sql`l.created_at`, tenantId, from, to)}
         and not coalesce(l.custom @> '{"test": true}', false)
       group by 1
     `);
@@ -143,7 +148,7 @@ export async function teamReport(tenantId: string, from: string, to: string) {
       select m.id as member_id, m.name, count(l.id)::int as leads,
         round(avg(extract(epoch from l.first_response_at - l.assigned_at) / 60)::numeric, 1)::float as avg_response_minutes
       from members m
-      left join leads l on l.owner_member_id = m.id and l.created_at >= ${from}::date and l.created_at < ${to}::date + 1
+      left join leads l on l.owner_member_id = m.id and ${inRange(sql`l.created_at`, tenantId, from, to)}
         and not coalesce(l.custom @> '{"test": true}', false)
       where m.role in ('manager', 'agent')
       group by m.id, m.name order by leads desc
@@ -151,9 +156,49 @@ export async function teamReport(tenantId: string, from: string, to: string) {
     const funnel = await db.execute<{ stage_id: string; name: string; position: number; leads: number }>(sql`
       select s.id as stage_id, s.name, s.position, count(distinct h.lead_id)::int as leads
       from stages s
-      left join stage_history h on h.stage_id = s.id and h.entered_at >= ${from}::date and h.entered_at < ${to}::date + 1
+      left join stage_history h on h.stage_id = s.id and ${inRange(sql`h.entered_at`, tenantId, from, to)}
       group by s.id, s.name, s.position order by s.position
     `);
     return { from, to, people: people.rows, funnel: funnel.rows };
+  });
+}
+
+type Scope = Pick<Membership, "memberId" | "recordScope">;
+
+/** Leads per day, temperature mix and speed for a date range. Staff limited to their own leads see only those. */
+export async function leadSummary(tenantId: string, from: string, to: string, scope: Scope = { memberId: null, recordScope: "all" }) {
+  const where = sql`${inRange(sql`l.created_at`, tenantId, from, to)}
+    and not coalesce(l.custom @> '{"test": true}', false)
+    ${scope.recordScope === "assigned" ? sql`and l.owner_member_id = ${scope.memberId}::uuid` : sql``}`;
+  return withTenant(tenantId, async (db) => {
+    const rows = await db.execute<{ day: string; temperature: "hot" | "warm" | "cold" | null; leads: number }>(sql`
+      select (l.created_at at time zone (select timezone from tenants where id = ${tenantId}::uuid))::date::text as day, l.temperature, count(*)::int as leads
+      from leads l where ${where} group by 1, 2
+    `);
+    const [totals] = (
+      await db.execute<{ median_reply: number | null; qualified: number; won: number }>(sql`
+        select
+          percentile_cont(0.5) within group (order by extract(epoch from l.first_response_at - l.created_at) / 60)::float as median_reply,
+          count(*) filter (where exists (
+            select 1 from stage_history h join stages s on s.id = h.stage_id
+            where h.lead_id = l.id and s.kind in ('qualified', 'won')
+          ))::int as qualified,
+          count(*) filter (where l.status = 'won')::int as won
+        from leads l where ${where}
+      `)
+    ).rows;
+
+    const perDay = new Map<string, number>();
+    const temperature = { hot: 0, warm: 0, cold: 0, unscored: 0 };
+    for (const row of rows.rows) {
+      perDay.set(row.day, (perDay.get(row.day) ?? 0) + row.leads);
+      temperature[row.temperature ?? "unscored"] += row.leads;
+    }
+    const days: { date: string; leads: number }[] = [];
+    for (let day = Date.parse(from); day <= Date.parse(to); day += 86_400_000) {
+      const date = new Date(day).toISOString().slice(0, 10);
+      days.push({ date, leads: perDay.get(date) ?? 0 });
+    }
+    return { days, temperature, total: days.reduce((sum, day) => sum + day.leads, 0), medianReplyMinutes: totals.median_reply, qualified: totals.qualified, won: totals.won };
   });
 }

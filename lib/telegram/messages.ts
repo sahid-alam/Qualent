@@ -77,6 +77,8 @@ async function sendDelivery(tenantId: string, leadId: string, memberId: string) 
   const message = await withTenant(tenantId, async (db) => {
     const row = await leadWithContact(db, leadId);
     const [agent] = await db.select().from(members).where(eq(members.id, memberId));
+    // A retry can run long after the job was queued, and the details must not reach someone removed since.
+    if (!agent?.active || row.lead.deliveredToMemberId !== memberId) return null;
     const buttons = await db
       .select()
       .from(stages)
@@ -101,12 +103,12 @@ async function sendDelivery(tenantId: string, leadId: string, memberId: string) 
         .join("\n"),
       reply_markup: {
         inline_keyboard: [
-          buttons.map((stage) => ({ text: stage.name, callback_data: encodeCallback(tenantId, leadId, stage.position) })),
+          buttons.map((stage) => ({ text: stage.name, callback_data: encodeCallback(tenantId, leadId, stage.id) })),
         ],
       },
     };
   });
-  await tg("sendMessage", message);
+  if (message) await tg("sendMessage", message);
 }
 
 async function markDeliveryFailed(tenantId: string, leadId: string, reason: string) {

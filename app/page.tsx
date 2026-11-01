@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireUserId } from "../lib/auth/session.ts";
-import { listMyTenants } from "../lib/permissions.ts";
+import { isPlatformAdmin, listMyTenants } from "../lib/permissions.ts";
 import { Empty } from "../components/ui";
 import { signOutAction } from "./auth-actions";
 
@@ -11,6 +11,7 @@ export default async function Home() {
   const first = tenants[0];
   if (first?.role === "client_viewer") redirect(`/portal/${first.id}`);
   if (first) redirect(`/c/${first.id}/today`);
+  if (await isPlatformAdmin(userId)) redirect("/clients/new");
   return (
     <main className="grid min-h-dvh place-items-center p-4">
       <Empty title="You don't have access to a client yet" body="Ask your manager to add you. Use the same email address you signed in with.">

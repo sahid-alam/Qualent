@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { isWithinHours, matches, pickByWeight } from "../lib/conditions.ts";
@@ -132,9 +133,10 @@ test("no reply moves the lead on, a reply cancels, and it never loops", async ()
 test("callback data fits Telegram's 64-byte limit and round-trips", () => {
   const tenantId = "11111111-2222-4333-8444-555555555555";
   const leadId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
-  const data = encodeCallback(tenantId, leadId, 12);
+  const stageId = randomUUID();
+  const data = encodeCallback(tenantId, leadId, stageId);
   expect(Buffer.byteLength(data)).toBeLessThanOrEqual(64);
-  expect(decodeCallback(data)).toEqual({ tenantId, leadId, position: 12 });
+  expect(decodeCallback(data)).toEqual({ tenantId, leadId, stagePrefix: stageId.replaceAll("-", "").slice(0, 12) });
   expect(decodeCallback("garbage")).toBeNull();
 });
 
@@ -229,7 +231,7 @@ test("a button tap updates the stage and Meta, once, and only for the owner", as
   const { leadId } = await ingestLead(id, { source: "meta_form", phone: uniquePhone(), touch: { metaLeadgenId: String(Date.now()) } });
   await deliverLead(id, leadId, agent.id, "staff");
   const viewing = await stageByName(id, "Viewing");
-  const data = encodeCallback(id, leadId, viewing.position);
+  const data = encodeCallback(id, leadId, viewing.id);
   const calls = stubFetch();
   const tap = (from: number) => processTelegramUpdate({ callback_query: { id: "q", data, from: { id: from } } });
 
@@ -259,7 +261,7 @@ test("a button can only reach stages marked for agents", async () => {
   await deliverLead(id, leadId, agent.id, "s");
   const offer = await stageByName(id, "Offer");
   const calls = stubFetch();
-  await processTelegramUpdate({ callback_query: { id: "q", data: encodeCallback(id, leadId, offer.position), from: { id: 42 } } });
+  await processTelegramUpdate({ callback_query: { id: "q", data: encodeCallback(id, leadId, offer.id), from: { id: 42 } } });
   expect(calls.at(-1)?.json?.text).toContain("no longer available");
   expect((await lead(id, leadId)).stageId).not.toBe(offer.id);
 });
@@ -295,6 +297,7 @@ test("server errors retry; rate limits reschedule with Telegram's own wait", asy
   const { id } = await newTenant();
   const agent = await linkedAgent(id, 42);
   const leadId = await newLead(id);
+  await withTenant(id, (db) => db.update(leads).set({ deliveredToMemberId: agent.id }).where(eq(leads.id, leadId)));
   const job = { type: "delivery", tenantId: id, leadId, memberId: agent.id };
 
   stubFetch(() => ({ status: 500, body: {} }));

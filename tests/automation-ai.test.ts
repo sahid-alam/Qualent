@@ -9,6 +9,7 @@ import { activities, adAnalyses, adInsightsDaily, aiModels, aiUsage, automationR
 import { ingestLead } from "../lib/leads/ingest.ts";
 import { addNote } from "../lib/leads/ingest.ts";
 import { changeStage } from "../lib/leads/work.ts";
+import { drain } from "../lib/jobs/runner.ts";
 import { newTenant, stageByName, stubFetch, uniquePhone } from "./helpers.ts";
 
 afterEach(async () => {
@@ -27,6 +28,17 @@ const addModel = (tasksFor: string[], values: Partial<typeof aiModels.$inferInse
     db.insert(aiModels).values({ provider: "ollama", baseUrl: "http://ai.test/v1", model: "gemma4", noTraining: true, tasks: tasksFor, ...values }),
   );
 
+// Enrollment queues the run, so a failure retries instead of sticking.
+const runAutomation = () => drain({ queues: ["automation"], budgetMs: 10_000 });
+const handleAndRun = async (...args: Parameters<typeof handleEvent>) => {
+  await handleEvent(...args);
+  await runAutomation();
+};
+const sweepAndRun = async (tenantId: string) => {
+  await sweep(tenantId);
+  await runAutomation();
+};
+
 const aiReply = (content: unknown, usage = { prompt_tokens: 1000, completion_tokens: 100 }) => ({
   body: { choices: [{ message: { content: typeof content === "string" ? content : JSON.stringify(content) } }], usage },
 });
@@ -39,11 +51,11 @@ test("a lead enrolls once per rule and steps run in order", async () => {
   const qualified = await stageByName(id, "Qualified");
   await addRule(id, [{ type: "create_task", title: "Follow up" }, { type: "tag", tag: "vip" }], { triggerConfig: { stageId: qualified.id } });
 
-  await handleEvent(id, "stage_changed", leadId, (await stageByName(id, "Contacted")).id, 0);
+  await handleAndRun(id, "stage_changed", leadId, (await stageByName(id, "Contacted")).id, 0);
   expect(await taskTitles(id)).toEqual([]);
 
-  await handleEvent(id, "stage_changed", leadId, qualified.id, 0);
-  await handleEvent(id, "stage_changed", leadId, qualified.id, 0);
+  await handleAndRun(id, "stage_changed", leadId, qualified.id, 0);
+  await handleAndRun(id, "stage_changed", leadId, qualified.id, 0);
   expect(await taskTitles(id)).toEqual(["Follow up"]);
 
   const [lead] = await withTenant(id, (db) => db.select().from(leads).where(eq(leads.id, leadId)));
@@ -59,7 +71,7 @@ test("a wait pauses the run, and waking re-checks the lead", async () => {
     exitStageIds: [lost.id],
   });
 
-  await handleEvent(id, "lead_created", leadId, undefined, 0);
+  await handleAndRun(id, "lead_created", leadId, undefined, 0);
   expect(await taskTitles(id)).toEqual([]);
   const [run] = await withTenant(id, (db) => db.select().from(automationRuns));
   expect(run).toMatchObject({ status: "running", stepIndex: 1 });
@@ -75,7 +87,7 @@ test("a wait with a still-valid lead finishes the remaining steps", async () => 
   const { id } = await newTenant();
   const leadId = await newLead(id);
   await addRule(id, [{ type: "wait", minutes: 1 }, { type: "create_task", title: "After wait" }], { trigger: "lead_created" });
-  await handleEvent(id, "lead_created", leadId, undefined, 0);
+  await handleAndRun(id, "lead_created", leadId, undefined, 0);
   const [run] = await withTenant(id, (db) => db.select().from(automationRuns));
   await runSteps(id, run.id, 0);
   expect(await taskTitles(id)).toEqual(["After wait"]);
@@ -90,7 +102,7 @@ test("conditions gate enrollment", async () => {
     trigger: "lead_created",
     conditions: [{ field: "temperature", op: "eq", value: "hot" }],
   });
-  await handleEvent(id, "lead_created", leadId, undefined, 0);
+  await handleAndRun(id, "lead_created", leadId, undefined, 0);
   expect(await taskTitles(id)).toEqual([]);
 });
 
@@ -98,7 +110,7 @@ test("rule chains stop at depth 3", async () => {
   const { id } = await newTenant();
   const leadId = await newLead(id);
   await addRule(id, [{ type: "create_task", title: "Too deep" }]);
-  await handleEvent(id, "stage_changed", leadId, undefined, 3);
+  await handleAndRun(id, "stage_changed", leadId, undefined, 3);
   expect(await taskTitles(id)).toEqual([]);
 });
 
@@ -106,12 +118,12 @@ test("the sweep finds overdue tasks and quiet leads", async () => {
   const { id } = await newTenant();
   const leadId = await newLead(id);
   await addRule(id, [{ type: "create_task", title: "Quiet" }], { trigger: "no_activity", triggerConfig: { days: 3 } });
-  await sweep(id);
+  await sweepAndRun(id);
   expect(await taskTitles(id)).toEqual([]);
 
   await withTenant(id, (db) => db.update(leads).set({ updatedAt: new Date(Date.now() - 4 * 86_400_000) }).where(eq(leads.id, leadId)));
-  await sweep(id);
-  await sweep(id);
+  await sweepAndRun(id);
+  await sweepAndRun(id);
   expect(await taskTitles(id)).toEqual(["Quiet"]);
 });
 

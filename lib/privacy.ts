@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { withPlatform, withTenant } from "./db/client.ts";
-import { activities, capiEvents, contacts, leads, tasks, touches, webhookInbox } from "./db/schema.ts";
+import { activities, auditLog, capiEvents, contacts, leads, tasks, touches, webhookInbox } from "./db/schema.ts";
 import { getTenant } from "./tenants.ts";
 
 export async function exportContact(tenantId: string, contactId: string, actor: string) {
@@ -9,6 +9,7 @@ export async function exportContact(tenantId: string, contactId: string, actor: 
     async (db) => {
       const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
       if (!contact) return null;
+      await db.insert(auditLog).values({ tenantId, actor, action: "export", tableName: "contacts", rowId: contactId });
       const contactLeads = await db.select().from(leads).where(eq(leads.contactId, contactId));
       const leadIds = contactLeads.map((lead) => lead.id);
       const none = sql`false`;
@@ -70,10 +71,17 @@ export async function eraseContact(tenantId: string, contactId: string, actor: s
   );
   if (identifiers === null) return false;
 
-  // Raw webhook copies may still hold this person for up to 30 days.
+  // Raw landing page copies may still hold this person for up to 30 days. Exact matches in this
+  // tenant only: a loose match here would delete other clients' leads that are waiting to process.
   if (identifiers.length) {
     await withPlatform((db) =>
-      db.delete(webhookInbox).where(or(...identifiers.map((value) => sql`${webhookInbox.payload}::text ilike ${`%${value.replace(/[%_\\]/g, "\\$&")}%`}`))),
+      db.delete(webhookInbox).where(
+        and(
+          eq(webhookInbox.source, "landing_page"),
+          sql`${webhookInbox.payload}->>'tenantId' = ${tenantId}`,
+          or(...identifiers.flatMap((value) => [sql`${webhookInbox.payload}->>'phone' = ${value}`, sql`lower(${webhookInbox.payload}->>'email') = ${value.toLowerCase()}`])),
+        ),
+      ),
     );
   }
   return true;

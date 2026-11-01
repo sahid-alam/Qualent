@@ -7,8 +7,10 @@ import { safeMessage } from "../errors.ts";
 import { webhookInbox, workerHeartbeat } from "../db/schema.ts";
 import { processLandingLead } from "../intake/landing.ts";
 import { markInbox, markInboxError, pollMetaLeads, processMetaLead } from "../intake/meta.ts";
+import { alertOps } from "../ops.ts";
 import { applyRetention, cleanInbox } from "../privacy.ts";
 import { syncSpend } from "../reports.ts";
+import { reportError } from "../sentry.ts";
 import { assignLead, checkAgentTimer, checkReplyTimer } from "../routing.ts";
 import { handleTelegramJob } from "../telegram/messages.ts";
 import { processTelegramUpdate } from "../telegram/updates.ts";
@@ -50,6 +52,12 @@ const HANDLERS: Record<string, (data: D) => Promise<unknown>> = {
   "maintenance/inbox_cleanup": () => cleanInbox(),
 };
 
+/** Which queue a job type belongs to, for sending a dead letter back. */
+export function queueOfType(type: string) {
+  const name = Object.keys(HANDLERS).find((key) => key.endsWith(`/${type}`));
+  return name?.split("/")[0] as QueueName | undefined;
+}
+
 const ALL_QUEUES = Object.keys(QUEUES) as QueueName[];
 const BATCH_SIZE = 5;
 
@@ -62,7 +70,7 @@ export async function drain(options: { queues?: QueueName[]; budgetMs?: number }
 
   for (const queue of queues) {
     while (Date.now() < deadline) {
-      const jobs = await boss.fetch<JobData>(queue, { batchSize: BATCH_SIZE });
+      const jobs = await boss.fetch<JobData>(queue, { batchSize: BATCH_SIZE, includeMetadata: true });
       if (!jobs.length) break;
       for (const job of jobs) {
         const name = `${queue}/${job.data.type}`;
@@ -76,6 +84,8 @@ export async function drain(options: { queues?: QueueName[]; budgetMs?: number }
           const message = safeMessage(error);
           console.error(`${name} failed (job ${job.id}): ${message}`);
           await boss.fail(queue, job.id, { message });
+          await reportError(error, name);
+          if (job.retryCount >= job.retryLimit) await alertOps(`${name} failed for good. See the System page. Job ${job.id}.`);
         }
       }
     }

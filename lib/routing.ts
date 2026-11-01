@@ -50,11 +50,33 @@ const routable = (db: Db, ids: string[]) =>
         .orderBy(asc(members.createdAt))
     : Promise.resolve([]);
 
-async function giveTo(db: Db, tenantId: string, leadId: string, memberId: string, rule: typeof routingRules.$inferSelect, verb: string) {
+/** The person can't take leads: inactive, or not staff. Written for the person assigning. */
+export class NotRoutableError extends Error {}
+
+/**
+ * A person or rule chose the owner. Same timer and timeline as automatic assignment, so the
+ * lead still moves on if nobody replies. With no routing rule there's nobody to move it to.
+ */
+export async function assignByHand(db: Db, tenantId: string, leadId: string, memberId: string, actor: string) {
+  const [member] = await routable(db, [memberId]);
+  if (!member) throw new NotRoutableError("That person can't take leads.");
+  const [lead] = await db.select().from(leads).where(eq(leads.id, leadId)).for("update");
+  if (!lead || lead.ownerMemberId === memberId) return;
+
+  const [touch] = await db.select().from(touches).where(eq(touches.leadId, leadId)).orderBy(asc(touches.occurredAt)).limit(1);
+  const rules = await db.select().from(routingRules).where(eq(routingRules.active, true)).orderBy(asc(routingRules.position));
+  const rule = rules.find((candidate) => matches(candidate.conditions, { ...lead, touch }));
+  if (rule) return giveTo(db, tenantId, leadId, memberId, rule, "assigned", actor);
+
+  await db.update(leads).set({ ownerMemberId: memberId, assignedAt: sql`now()`, updatedAt: sql`now()` }).where(eq(leads.id, leadId));
+  await db.insert(activities).values({ tenantId, leadId, kind: "assignment", body: "assigned", data: { memberId }, actor });
+}
+
+async function giveTo(db: Db, tenantId: string, leadId: string, memberId: string, rule: typeof routingRules.$inferSelect, verb: string, actor = "system") {
   const counters = { ...rule.counters, [memberId]: (rule.counters[memberId] ?? 0) + 1 };
   await db.update(routingRules).set({ counters }).where(eq(routingRules.id, rule.id));
   await db.update(leads).set({ ownerMemberId: memberId, assignedAt: sql`now()`, updatedAt: sql`now()` }).where(eq(leads.id, leadId));
-  await db.insert(activities).values({ tenantId, leadId, kind: "assignment", body: verb, data: { memberId } });
+  await db.insert(activities).values({ tenantId, leadId, kind: "assignment", body: verb, data: { memberId }, actor });
   await enqueue(
     db,
     "routing",

@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { guardPage } from "../../../../lib/auth/session.ts";
 import { listCampaigns, listInbox, listRoutableMembers } from "../../../../lib/queries.ts";
 import { AddLead } from "../../../../components/add-lead";
 import { ActionForm, SelectAll, Submit } from "../../../../components/forms";
-import { Empty, inlineFieldClass, PageHeader, SOURCE_LABEL, TableWrap, Temperature, timeAgo } from "../../../../components/ui";
-import { bulkAssignAction } from "../actions";
+import { Empty, inlineFieldClass, PageHeader, PersonLink, SOURCE_LABEL, TableWrap, Temperature, timeAgo } from "../../../../components/ui";
+import { bulkEditAction } from "../actions";
 
 export const metadata = { title: "New leads · Qualent" };
 
@@ -22,11 +21,12 @@ export default async function InboxPage({ params }: { params: Promise<{ tenantId
       />
       {!rows.length ? (
         <Empty
+          clear
           title={membership.recordScope === "assigned" ? "Your manager handles new leads" : "No leads are waiting"}
           body={membership.recordScope === "assigned" ? "Leads assigned to you appear on your Today list and in All leads." : "New leads with no owner appear here. Set up who gets leads in Client setup, and most will go straight to a person."}
         />
       ) : (
-        <ActionForm action={bulkAssignAction} hidden={{ tenantId }} className="grid gap-3" resetOnOk>
+        <ActionForm action={bulkEditAction} hidden={{ tenantId }} className="grid gap-3" resetOnOk>
           <TableWrap>
             <thead>
               <tr>
@@ -34,7 +34,7 @@ export default async function InboxPage({ params }: { params: Promise<{ tenantId
                 <th>Name</th>
                 <th>Source</th>
                 <th>Campaign</th>
-                <th>AI</th>
+                <th>Score</th>
                 <th className="num">Waiting</th>
               </tr>
             </thead>
@@ -44,7 +44,7 @@ export default async function InboxPage({ params }: { params: Promise<{ tenantId
                   <td>
                     <input type="checkbox" name="leadIds[]" value={lead.id} aria-label={`Select ${contact.name ?? "lead"}`} className="size-4 accent-(--accent)" />
                   </td>
-                  <td><Link href={`/c/${tenantId}/leads/${lead.id}`} className="font-medium hover:underline">{contact.name ?? contact.phoneE164 ?? contact.email}</Link></td>
+                  <td><PersonLink href={`/c/${tenantId}/leads/${lead.id}`} name={contact.name ?? contact.phoneE164 ?? contact.email ?? "Unknown"} /></td>
                   <td className="text-fg-soft">{touch ? SOURCE_LABEL(touch.source) : ""}</td>
                   <td className="text-fg-soft">{touch?.campaignId ?? "—"}</td>
                   <td><Temperature temperature={lead.temperature} score={lead.score} /></td>

@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { eq } from "drizzle-orm";
 import { expect, test } from "vitest";
 import { withTenant } from "../lib/db/client.ts";
@@ -6,7 +7,7 @@ import { enqueue, getBoss } from "../lib/jobs/queues.ts";
 import { ingestLead } from "../lib/leads/ingest.ts";
 import { changeStage, exportCsv, fieldError, getLead, importCsv, listLeads, logCall, safeCell, setCustomFields, todayTasks, createTask } from "../lib/leads/work.ts";
 import { LeadNotAccessibleError } from "../lib/leads/ingest.ts";
-import { listInbox } from "../lib/queries.ts";
+import { listInbox, listQueue, queueCounts } from "../lib/queries.ts";
 import { safeMessage } from "../lib/errors.ts";
 import { can, ForbiddenError, requireMember } from "../lib/permissions.ts";
 import { maskPhone, normalizePhone } from "../lib/phone.ts";
@@ -179,7 +180,7 @@ test("CSV import reports each row, and export round-trips", async () => {
   const csv = `Name,Phone,Email\n"Khan, Ali",${phone},\nDuplicate,${phone},\nNobody,,\n`;
   const report = await importCsv(id, csv, "tester");
   expect(report).toEqual({ created: 1, duplicates: 1, errors: [{ row: 4, message: "A lead needs a phone or an email" }] });
-  const exported = await exportCsv(id, {}, everyone);
+  const exported = await exportCsv(id, {}, everyone, "t");
   expect(exported).toContain('"Khan, Ali"');
   expect(exported).toContain(phone);
 });
@@ -224,7 +225,7 @@ test("a spreadsheet can't run a lead's text as a formula", async () => {
 
   const { id } = await newTenant();
   await ingestLead(id, { source: "landing_page", name: "=cmd|calc", phone: "+971501230001" });
-  const csv = await exportCsv(id, {}, everyone);
+  const csv = await exportCsv(id, {}, everyone, "t");
   expect(csv).toContain("'=cmd|calc");
   expect(csv).toContain("+971501230001");
   expect(csv).not.toContain("'+971");
@@ -264,7 +265,8 @@ test("the new-leads inbox stays empty for staff limited to their own leads", asy
 test("a failed query's values never reach logs or the screen", async () => {
   const { id } = await newTenant();
   const failure = await withTenant(id, (db) => db.insert(contacts).values({ tenantId: crypto.randomUUID(), name: "Secret Name", phoneE164: "+971509998877" })).catch((error) => error);
-  expect(failure.message).toContain("+971509998877"); // Why this matters: Drizzle includes them.
+  // Drizzle includes the values in its message, so withTenant strips them for every caller.
+  expect(inspect(failure, { depth: 5 })).not.toMatch(/Secret Name|971509998877/);
   const safe = safeMessage(failure);
   expect(safe).toMatch(/^Database error/);
   expect(safe).not.toMatch(/Secret Name|971509998877/);
@@ -274,4 +276,39 @@ test("a failed query's values never reach logs or the screen", async () => {
   const report = await importCsv(id, "name,phone\nAli,+971501110000\n", "t", "not-a-uuid");
   expect(JSON.stringify(report.errors)).not.toMatch(/971501110000|params/);
   expect(report.errors[0].message).toBe("This row couldn't be saved");
+});
+
+test("the queue sorts leads by who they wait on, and agents see only their own", async () => {
+  const { id } = await newTenant();
+  const owner = await addMember(id, { recordScope: "assigned" });
+  const everyone = { memberId: null, recordScope: "all" } as const;
+  const lead = async (values: Partial<typeof leads.$inferInsert>) => {
+    const { leadId } = await ingestLead(id, { source: "manual", phone: uniquePhone() });
+    await withTenant(id, (db) => db.update(leads).set(values).where(eq(leads.id, leadId)));
+    return leadId;
+  };
+  const low = await lead({ score: 40, temperature: "cold", ownerMemberId: owner.id });
+  const high = await lead({ score: 90, temperature: "hot" });
+  const unscored = await lead({ needsReview: false });
+  const replied = await lead({ firstResponseAt: new Date() });
+  const failed = await lead({ deliveredAt: new Date(), deliveryFailedAt: new Date() });
+  const delivered = await lead({ deliveredAt: new Date() });
+  const closed = await lead({ status: "won" });
+
+  const ids = async (tab: "needs" | "waiting" | "done") => (await listQueue(id, everyone, { tab })).map((row) => row.lead.id);
+  expect((await ids("needs")).slice(0, 2)).toEqual([high, low]);
+  expect(await ids("needs")).toEqual(expect.arrayContaining([unscored, failed]));
+  expect(await ids("needs")).toHaveLength(4);
+  expect((await ids("waiting")).sort()).toEqual([replied, delivered].sort());
+  expect(await ids("done")).toEqual([closed]);
+  expect(await queueCounts(id, everyone)).toMatchObject({ needs: 4, hot: 1, cold: 1, unscored: 2, waiting: 2, done: 1 });
+
+  const own = { memberId: owner.id, recordScope: "assigned" } as const;
+  expect((await listQueue(id, own)).map((row) => row.lead.id)).toEqual([low]);
+  expect(await queueCounts(id, own)).toMatchObject({ needs: 1, cold: 1, hot: 0, unowned: 0 });
+
+  const due = new Date();
+  await createTask(id, { leadId: low, title: "mine", dueAt: due, assigneeMemberId: owner.id }, "t");
+  await createTask(id, { leadId: high, title: "not my lead", dueAt: due, assigneeMemberId: owner.id }, "t");
+  expect((await todayTasks(id, "Asia/Dubai", owner.id, due, true)).map(({ task }) => task.title)).toEqual(["mine"]);
 });

@@ -2,19 +2,20 @@
 
 Multi-tenant, white-label CRM that 7Gence runs for its Meta ads clients. It gets leads to people fast over Telegram, sends results back to Meta, and shows clients cost per qualified lead.
 
-**Status: backend and screens built and tested locally. Not yet run against real Supabase, Vercel, Meta or Telegram.** See `TASKS.md`.
+**Status: all of v1 that doesn't need keys is built and tested locally. Staff MFA, invite emails and password reset are not built. Nothing has run against real Supabase, Vercel, Meta or Telegram.** See `TASKS.md` and [docs/DEPLOY.md](docs/DEPLOY.md).
 
 Read first: [docs/ROADMAP.md](docs/ROADMAP.md) for the next task, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design, [docs/adr/](docs/adr/) for why, [docs/flows.html](docs/flows.html) for the approved flows. Update `TASKS.md` as you go.
 
 ## Stack
 
-Next.js 16, React 19, TypeScript, Tailwind 4, dnd-kit, zod, lucide-react, culori. Small own UI kit on the Ember tokens, Server Components and Server Actions (ADR-0011). Supabase Postgres and Auth, Drizzle ORM, pg-boss, libphonenumber-js, Sentry. Vercel Hobby in Mumbai (`bom1`), with no always-on worker: webhooks process right away with `after()`, and Supabase's scheduler calls `/api/cron/tick` when jobs are due. AI model not chosen yet.
+Next.js 16, React 19, TypeScript, Tailwind 4, dnd-kit, zod, lucide-react, culori. Small own UI kit on the Ember tokens, Server Components and Server Actions (ADR-0011). Supabase Postgres and Auth, Drizzle ORM, pg-boss, libphonenumber-js, Sentry over its HTTP API (`lib/sentry.ts`; its SDK brings in a non-MIT CLI). Vercel Hobby in Mumbai (`bom1`), with no always-on worker: webhooks process right away with `after()`, and Supabase's scheduler calls `/api/cron/tick` when jobs are due. AI model not chosen yet.
 
 ## Folders
 
 ```
 app/c/[tenantId]/   7Gence staff screens; actions.ts holds their server actions
 app/portal/[tenantId]/  Client Portal, reports only, client-branded
+app/ops/            System page, platform admins only
 app/api/            Webhooks, intake and the scheduler tick
 proxy.ts            Refreshes the Supabase session
 worker/             Local job loop
@@ -32,6 +33,8 @@ lib/routing.ts      Assignment and reply timers
 lib/automation.ts   Rules
 lib/reports.ts      Spend sync, client and team reports
 lib/privacy.ts      Export, erase, retention
+lib/system.ts       Health across clients, failed jobs, AI models
+lib/sentry.ts       Error reports, with personal data scrubbed
 components/         Shared UI
 design/             theme.css, tokens.json
 drizzle/            Migrations
@@ -63,6 +66,8 @@ npm run check:licenses
 npm run check:css    # no physical CSS classes
 npm run db:generate  # create a migration from lib/db/schema.ts
 npm run db:migrate   # migrations, job queues, grants; needs MIGRATE_DATABASE_URL
+npm run make-admin -- person@example.com   # first platform admin; see docs/DEPLOY.md
+npm run telegram:setup                     # points the bot at APP_URL
 ```
 
 Before calling a task done, run `npm run lint && npm run typecheck && npm test`, and meet its "Done when" in the roadmap.
@@ -76,7 +81,7 @@ The worker runs on Node's built-in TypeScript support with no build step, so `li
 - The browser never talks to the database.
 - Webhooks verify signatures, save to `webhook_inbox`, queue a job, and reply. Process after the response with `after()`, never before it.
 - A new tenant table gets its policy in a migration. `tests/isolation.test.ts` fails if row-level security is off on any public table.
-- Drizzle wraps database errors, so read `error.cause` for the real message.
+- Errors from `withTenant()` and friends carry no query values: `error.cause` keeps the Postgres code and a message with quoted values masked.
 - Jobs must be safe to run twice.
 - Queue jobs in the same transaction as the data change.
 - Validate input with zod at every boundary. Lead text is untrusted, including when passed to AI.

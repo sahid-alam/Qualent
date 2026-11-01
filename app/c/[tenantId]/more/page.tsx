@@ -12,7 +12,7 @@ const rowClass = "flex min-h-11 items-center rounded-row border border-line bg-c
 /** What doesn't fit in the phone's bottom bar and the narrow rail. */
 export default async function MorePage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = await params;
-  const { can } = await guardPage(tenantId, "leads.read");
+  const { can, membership } = await guardPage(tenantId, "leads.read");
   const tenants = (await listMyTenants(await requireUserId())).filter((tenant) => tenant.role !== "client_viewer");
   const dark = (await cookies()).get("qualent_theme")?.value !== "light";
   const base = `/c/${tenantId}`;
@@ -25,6 +25,7 @@ export default async function MorePage({ params }: { params: Promise<{ tenantId:
           { href: `${base}/setup`, label: "Client setup" },
         ]
       : []),
+    ...(membership.role === "platform_admin" ? [{ href: "/ops", label: "System" }] : []),
   ];
 
   return (

@@ -15,15 +15,25 @@ function expand(value: string) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-/** Fits Telegram's 64-byte callback limit: two compact ids and a stage position. */
-export function encodeCallback(tenantId: string, leadId: string, position: number) {
-  return `s:${compact(tenantId)}:${compact(leadId)}:${position}`;
+const STAGE_PREFIX = 12;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * Fits Telegram's 64-byte callback limit: two compact ids and the start of the
+ * stage id. Not its position, because reordering stages must not change what an
+ * old button does.
+ */
+export function encodeCallback(tenantId: string, leadId: string, stageId: string) {
+  return `s:${compact(tenantId)}:${compact(leadId)}:${stageId.replaceAll("-", "").slice(0, STAGE_PREFIX)}`;
 }
 
 export function decodeCallback(data: string) {
-  const [prefix, tenant, lead, position] = data.split(":");
-  if (prefix !== "s" || !tenant || !lead || !/^\d+$/.test(position ?? "")) return null;
-  return { tenantId: expand(tenant), leadId: expand(lead), position: Number(position) };
+  const [prefix, tenant, lead, stage] = data.split(":");
+  if (prefix !== "s" || !tenant || !lead || !/^[0-9a-f]{12}$/.test(stage ?? "")) return null;
+  const ids = { tenantId: expand(tenant), leadId: expand(lead) };
+  // Telegram lets clients send any callback data, and a bad id must not become a failing job.
+  if (!UUID.test(ids.tenantId) || !UUID.test(ids.leadId)) return null;
+  return { ...ids, stagePrefix: stage };
 }
 
 /** Null member links the tenant's team group. */
@@ -38,7 +48,8 @@ export async function createLinkCode(tenantId: string, memberId: string | null) 
       expiresAt: new Date(Date.now() + LINK_MINUTES * 60_000),
     }),
   );
-  return { code, url: `https://t.me/${process.env.TELEGRAM_BOT_USERNAME ?? "bot"}?start=${code}` };
+  // startgroup asks which group to add the bot to. A plain start link would link a private chat.
+  return { code, url: `https://t.me/${process.env.TELEGRAM_BOT_USERNAME ?? "bot"}?${memberId ? "start" : "startgroup"}=${code}` };
 }
 
 export function verifyTelegramSecret(header: string | null) {
@@ -71,10 +82,20 @@ export async function processTelegramUpdate(update: Update) {
 }
 
 async function handleLink(code: string, message: NonNullable<Update["message"]>) {
-  const [entry] = await withPlatform((db) =>
-    db.delete(tenantDirectory).where(and(eq(tenantDirectory.key, `link:${code}`), eq(tenantDirectory.kind, "link_code"))).returning(),
-  );
   const chatId = String(message.chat.id);
+  const where = and(eq(tenantDirectory.key, `link:${code}`), eq(tenantDirectory.kind, "link_code"));
+  const [peek] = await withPlatform((db) => db.select().from(tenantDirectory).where(where));
+  // Team alerts carry lead names, so they must never land in one person's chat. The link stays usable.
+  if (peek && !peek.memberId && message.chat.type === "private") {
+    await tg("sendMessage", { chat_id: chatId, text: "This link is for a group. Open it again and choose the team group." });
+    return;
+  }
+  // Deliveries carry a full phone number, so they must never land in a group.
+  if (peek?.memberId && message.chat.type !== "private") {
+    await tg("sendMessage", { chat_id: chatId, text: "This link is personal. Open it in a private chat with the bot." });
+    return;
+  }
+  const [entry] = await withPlatform((db) => db.delete(tenantDirectory).where(where).returning());
   if (!entry || !entry.expiresAt || entry.expiresAt < new Date()) {
     await tg("sendMessage", { chat_id: chatId, text: "This link has expired. Ask for a new one." });
     return;
@@ -97,18 +118,17 @@ async function handleButton(query: NonNullable<Update["callback_query"]>) {
   const answer = (text: string) => tg("answerCallbackQuery", { callback_query_id: query.id, text });
   if (!decoded) return answer("Unknown button");
 
-  const { tenantId, leadId, position } = decoded;
+  const { tenantId, leadId, stagePrefix } = decoded;
   const result = await withTenant(tenantId, async (db) => {
-    const [member] = await db.select().from(members).where(eq(members.telegramUserId, String(query.from.id)));
+    const [member] = await db.select().from(members).where(and(eq(members.telegramUserId, String(query.from.id)), eq(members.active, true)));
     if (!member) return "You are not linked to this client.";
 
     const [lead] = await db.select().from(leads).where(eq(leads.id, leadId)).for("update");
     if (!lead || lead.deliveredToMemberId !== member.id) return "This lead is not assigned to you.";
 
-    const [stage] = await db
-      .select()
-      .from(stages)
-      .where(and(eq(stages.pipelineId, lead.pipelineId), eq(stages.position, position), eq(stages.agentButton, true)));
+    const stage = (await db.select().from(stages).where(and(eq(stages.pipelineId, lead.pipelineId), eq(stages.agentButton, true)))).find(
+      (candidate) => candidate.id.replaceAll("-", "").startsWith(stagePrefix),
+    );
     if (!stage) return "That option is no longer available.";
 
     await db

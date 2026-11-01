@@ -4,6 +4,7 @@ import { withTenant, type Db } from "./db/client.ts";
 import { activities, automationRules, automationRuns, leads, tasks } from "./db/schema.ts";
 import { enqueue } from "./jobs/queues.ts";
 import { moveStage } from "./leads/stage.ts";
+import { assignByHand, NotRoutableError } from "./routing.ts";
 
 const MAX_DEPTH = 3;
 
@@ -17,26 +18,24 @@ function triggerApplies(rule: Rule, stageId?: string) {
 /** A lead enrolls once per rule, when it newly matches. */
 export async function handleEvent(tenantId: string, event: Trigger, leadId: string, stageId: string | undefined, depth: number) {
   if (depth >= MAX_DEPTH) return;
-  const ruleIds = await withTenant(tenantId, async (db) => {
+  await withTenant(tenantId, async (db) => {
     const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));
-    if (!lead) return [];
+    if (!lead) return;
     const rules = await db
       .select()
       .from(automationRules)
       .where(and(eq(automationRules.active, true), eq(automationRules.trigger, event)));
     const matched = rules.filter((rule) => triggerApplies(rule, stageId) && matches(rule.conditions, lead));
-    const enrolled: string[] = [];
     for (const rule of matched) {
       const [run] = await db
         .insert(automationRuns)
         .values({ tenantId, ruleId: rule.id, leadId })
         .onConflictDoNothing()
         .returning({ id: automationRuns.id });
-      if (run) enrolled.push(run.id);
+      // Queued with the enrollment, so a failed run retries and is seen, instead of sticking forever.
+      if (run) await enqueue(db, "automation", { type: "resume", tenantId, runId: run.id, depth });
     }
-    return enrolled;
   });
-  for (const runId of ruleIds) await runSteps(tenantId, runId, depth);
 }
 
 /** Runs until a wait or the end. Re-checks the lead each time, so a stale rule does nothing. */
@@ -82,7 +81,13 @@ async function applyStep(db: Db, tenantId: string, leadId: string, step: Rule["s
       await moveStage(db, tenantId, leadId, step.stageId, "automation", depth + 1);
       return;
     case "assign":
-      await db.update(leads).set({ ownerMemberId: step.memberId, updatedAt: sql`now()` }).where(eq(leads.id, leadId));
+      try {
+        await assignByHand(db, tenantId, leadId, step.memberId, "automation");
+      } catch (error) {
+        if (!(error instanceof NotRoutableError)) throw error;
+        // The person left after the rule was written. The rest of the rule still runs.
+        await db.insert(activities).values({ tenantId, leadId, kind: "system", body: "Automation couldn't assign: that person can't take leads now", actor: "automation" });
+      }
       return;
     case "tag":
       await db

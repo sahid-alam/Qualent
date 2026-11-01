@@ -4,7 +4,8 @@ import { DndContext, KeyboardSensor, PointerSensor, useDraggable, useDroppable, 
 import Link from "next/link";
 import { useId, useOptimistic, useState, useTransition } from "react";
 import { moveStageAction } from "../app/c/[tenantId]/actions";
-import { Banner, cx, LinkButton, Temperature } from "./ui";
+import { GripVertical } from "lucide-react";
+import { Avatar, Banner, cx, LinkButton, ScorePill } from "./ui";
 
 export type BoardStage = { id: string; name: string; kind: string };
 export type BoardCard = { id: string; stageId: string; name: string; temperature: string | null; score: number | null; delivered: boolean; owner: string | null };
@@ -15,22 +16,27 @@ function Card({ card, stages, tenantId, onMove }: { card: BoardCard; stages: Boa
     <li
       ref={setNodeRef}
       style={transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : undefined}
-      className={cx("grid gap-2 rounded-tile border border-line bg-panel p-3", isDragging && "relative z-10 shadow-pop")}
+      className={cx("grid gap-2.5 rounded-row border border-line bg-panel p-3.5 transition-colors duration-(--dur-fast) hover:border-line-hover", isDragging && "relative z-10 shadow-pop")}
     >
-      <div className="flex items-start justify-between gap-2">
-        <Link href={`/c/${tenantId}/leads/${card.id}`} className="min-w-0 truncate font-medium hover:underline">{card.name}</Link>
-        <button {...listeners} {...attributes} aria-label={`Drag ${card.name}`} className="cursor-grab touch-none px-1 text-fg-muted hover:text-fg">⠿</button>
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <Temperature temperature={card.temperature} score={card.score} />
-        <span className="truncate text-xs text-fg-muted">{card.owner ?? "No owner"}</span>
+      <div className="flex items-center gap-2.5">
+        <Avatar name={card.name} size="sm" />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.75">
+            <Link href={`/c/${tenantId}/leads/${card.id}`} className="min-w-0 truncate text-sm font-semibold hover:underline">{card.name}</Link>
+            <ScorePill temperature={card.temperature} score={card.score} />
+          </span>
+          <span className="block truncate text-2xs text-fg-muted">{card.owner ?? "No owner"}</span>
+        </span>
+        <button {...listeners} {...attributes} aria-label={`Drag ${card.name}`} className="grid size-7 shrink-0 cursor-grab touch-none place-items-center rounded-full text-fg-muted hover:bg-hover hover:text-fg pointer-coarse:size-11">
+          <GripVertical size={14} aria-hidden />
+        </button>
       </div>
       <label className="text-xs text-fg-muted">
         <span className="sr-only">Move {card.name} to</span>
         <select
           value=""
           onChange={(event) => onMove(card.id, event.target.value)}
-          className="h-8 w-full rounded-dense border border-line bg-transparent px-2 text-xs text-fg-muted"
+          className="h-8 w-full rounded-full border border-line bg-control px-3 text-xs text-fg-muted pointer-coarse:h-11"
         >
           <option value="" disabled className="bg-panel">Move to…</option>
           {stages.filter((stage) => stage.id !== card.stageId).map((stage) => (
@@ -45,10 +51,10 @@ function Card({ card, stages, tenantId, onMove }: { card: BoardCard; stages: Boa
 function Column({ stage, cards, stages, tenantId, onMove }: { stage: BoardStage; cards: BoardCard[]; stages: BoardStage[]; tenantId: string; onMove: (leadId: string, stageId: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   return (
-    <section ref={setNodeRef} aria-label={stage.name} className={cx("grid w-70 shrink-0 content-start gap-2 rounded-card bg-card p-2.5", isOver && "outline-2 outline-accent")}>
+    <section ref={setNodeRef} aria-label={stage.name} className={cx("grid w-70 shrink-0 content-start gap-2 rounded-panel border border-line bg-card p-2.5", isOver && "outline-2 outline-accent")}>
       <header className="flex items-center justify-between px-1.5 pt-1">
-        <h2 className="text-sm font-semibold">{stage.name}</h2>
-        <span className="font-mono text-xs text-fg-muted tabular-nums">{cards.length}</span>
+        <h2 className="font-mono text-2xs tracking-label text-fg-muted uppercase">{stage.name}</h2>
+        <span className="font-mono text-2xs text-fg-muted tabular-nums">{cards.length}</span>
       </header>
       <ul className="grid gap-2">
         {cards.map((card) => (

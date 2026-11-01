@@ -12,9 +12,10 @@ export default async function LoginPage() {
   const people = dev ? await withPlatform((db) => db.select().from(profiles)) : [];
 
   return (
-    <main className="grid min-h-dvh place-items-center p-4">
+    <main className="grid min-h-dvh place-items-center bg-(image:--wash-hero) bg-size-[100%_32rem] bg-no-repeat p-4">
       <section className="grid w-full max-w-md gap-5 rounded-modal border border-line bg-panel p-8 shadow-modal">
         <div className="grid gap-1">
+          <span aria-hidden className="mb-3 grid size-10 place-items-center rounded-full bg-(image:--gradient-accent) font-bold text-on-accent shadow-glow">Q</span>
           <h1 className="text-3xl font-semibold tracking-tight">Qualent</h1>
           <p className="text-sm text-fg-muted">Sign in to work your leads.</p>
         </div>

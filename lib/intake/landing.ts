@@ -9,7 +9,8 @@ import { markInbox } from "./meta.ts";
 
 const RATE_LIMIT_PER_MINUTE = 30;
 
-const text = (max: number) => z.string().trim().max(max).optional();
+// Too-long tracking text is cut, not rejected: it must never cost us the lead. Postgres also refuses null bytes.
+const text = (max: number) => z.string().transform((value) => value.replaceAll("\0", "").trim().slice(0, max)).optional();
 
 const LandingLead = z.object({
   name: text(200),
@@ -35,7 +36,7 @@ const LandingLead = z.object({
 });
 
 export type LandingMeta = { origin: string | null; ip: string | null; userAgent: string | null };
-export type LandingResult = { status: 200 | 400 | 403 | 404 | 429; inboxId?: string; allowOrigin?: string };
+export type LandingResult = { status: 200 | 400 | 403 | 404 | 429 | 500; inboxId?: string; allowOrigin?: string };
 
 export async function receiveLandingLead(key: string, body: unknown, meta: LandingMeta): Promise<LandingResult> {
   const [route] = await withPlatform((db) =>

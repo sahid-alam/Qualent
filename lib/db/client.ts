@@ -1,5 +1,6 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool, type PoolClient } from "pg";
+import { safeMessage } from "../errors.ts";
 
 let pool: Pool | undefined;
 
@@ -9,6 +10,18 @@ function getPool() {
 }
 
 export type Db = NodePgDatabase & { $client: PoolClient };
+
+/**
+ * A failed query's error holds its values, and Next.js logs uncaught errors as they are.
+ * Stripping them here covers every caller. Our own error classes pass through untouched.
+ */
+function cleanDbError(error: unknown) {
+  const { message = "", code, cause } = (error ?? {}) as { message?: string; code?: unknown; cause?: { code?: unknown; message?: unknown } };
+  const dbCode = cause?.code ?? code;
+  const isDatabase = message.startsWith("Failed query") || (typeof dbCode === "string" && /^[0-9A-Z]{5}$/.test(dbCode));
+  if (!isDatabase) return error;
+  return Object.assign(new Error(safeMessage(error)), { cause: { code: dbCode, message: String(cause?.message ?? message).split("\n")[0].replace(/"[^"]*"/g, '"…"') } });
+}
 
 async function inTransaction<T>(settings: Record<string, string>, fn: (db: Db) => Promise<T>) {
   const client = await getPool().connect();
@@ -22,7 +35,7 @@ async function inTransaction<T>(settings: Record<string, string>, fn: (db: Db) =
     return result;
   } catch (error) {
     await client.query("rollback");
-    throw error;
+    throw cleanDbError(error);
   } finally {
     client.release();
   }

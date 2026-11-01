@@ -40,8 +40,8 @@ export async function saveMetaWebhook(body: MetaWebhook) {
   return changes.length;
 }
 
-async function graph<T>(path: string, token: string): Promise<T> {
-  const response = await fetch(`${GRAPH_URL}/${path}`, { headers: { authorization: `Bearer ${token}` } });
+async function graph<T>(path: string, token: string, method: "GET" | "POST" = "GET"): Promise<T> {
+  const response = await fetch(`${GRAPH_URL}/${path}`, { method, headers: { authorization: `Bearer ${token}` } });
   if (!response.ok) throw new MetaApiError(response.status, (await response.text()).slice(0, 500));
   return response.json() as Promise<T>;
 }
@@ -209,4 +209,29 @@ export async function saveConnection(
     },
     actor,
   );
+}
+
+/**
+ * Checks a new connection with Meta straight away, so a bad token shows on screen
+ * and not days later. A page must also be subscribed, or Meta never sends its
+ * webhooks and only the 15-minute poll finds leads. Returns the problem, if any.
+ */
+export async function verifyConnection(tenantId: string, connectionId: string) {
+  const [row] = await withTenant(tenantId, (db) => db.select().from(connections).where(eq(connections.id, connectionId)));
+  if (!row?.secretEncrypted || row.kind === "dataset") return null; // Datasets are checked by "Send a test event".
+  const token = decryptSecret(row.secretEncrypted);
+  try {
+    if (row.kind === "page") {
+      await graph(`${row.externalId}/subscribed_apps?subscribed_fields=leadgen`, token, "POST");
+      await setConnection(tenantId, row.id, { status: "ok", lastError: null });
+    } else {
+      const account = await graph<{ currency?: string; timezone_name?: string }>(`${row.externalId}?fields=currency,timezone_name`, token);
+      await setConnection(tenantId, row.id, { status: "ok", lastError: null, config: { ...row.config, currency: account.currency, timezone: account.timezone_name } });
+    }
+    return null;
+  } catch (error) {
+    const message = error instanceof MetaApiError ? error.message : "Couldn't reach Meta";
+    await setConnection(tenantId, row.id, { status: "error", lastError: message.slice(0, 500) });
+    return message;
+  }
 }

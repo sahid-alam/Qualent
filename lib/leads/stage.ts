@@ -6,7 +6,7 @@ import { enqueue } from "../jobs/queues.ts";
 type Lead = typeof leads.$inferSelect;
 type Stage = typeof stages.$inferSelect;
 
-const STATUS_BY_KIND = { open: "open", qualified: "open", won: "won", lost: "lost" } as const;
+export const STATUS_BY_KIND = { open: "open", qualified: "open", won: "won", lost: "lost" } as const;
 
 /** One stage change, in one transaction: lead, history, timeline, Meta event, automation. */
 export async function moveStage(db: Db, tenantId: string, leadId: string, stageId: string, actor: string, depth = 0) {

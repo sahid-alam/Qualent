@@ -5,10 +5,12 @@ import { guardPage } from "../../../../lib/auth/session.ts";
 import type { Brand } from "../../../../lib/brand.ts";
 import { withTenant } from "../../../../lib/db/client.ts";
 import { tenantDirectory } from "../../../../lib/db/schema.ts";
-import { listMembers, listRoutingRules, setupStatus } from "../../../../lib/settings.ts";
+import { landingSnippet } from "../../../../lib/intake/snippet.ts";
+import { aiSpendThisMonth, listCustomFields, listMembers, listPipelines, listRoutingRules, setupStatus } from "../../../../lib/settings.ts";
 import { LinkTelegram, TestLead } from "../../../../components/setup-tools";
 import { ActionForm, CopyButton, Submit } from "../../../../components/forms";
 import { Field, inputClass, Label, LinkButton, PageHeader, Panel, Pill, textareaClass } from "../../../../components/ui";
+import { ClientSettings, CustomFields, EditPerson, PipelineStages } from "./sections";
 import { addPersonAction, addRuleAction, brandAction, deleteRuleAction, originsAction, saveConnectionAction, setPersonActiveAction } from "../actions";
 
 export const metadata = { title: "Client setup · Qualent" };
@@ -46,21 +48,17 @@ function ConnectionForm({ tenantId, kind, idLabel, secretLabel, hint }: { tenant
 export default async function SetupPage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = await params;
   await guardPage(tenantId, "settings.manage");
-  const [status, people, rules, [intake]] = await Promise.all([
+  const [status, people, rules, [intake], pipelines, fields, aiSpent] = await Promise.all([
     setupStatus(tenantId),
     listMembers(tenantId),
     listRoutingRules(tenantId),
     withTenant(tenantId, (db) => db.select().from(tenantDirectory).where(and(eq(tenantDirectory.tenantId, tenantId), eq(tenantDirectory.kind, "intake_key")))),
+    listPipelines(tenantId),
+    listCustomFields(tenantId),
+    aiSpendThisMonth(tenantId),
   ]);
   const intakeKey = intake?.key.replace("intake:", "") ?? "";
-  const appUrl = process.env.APP_URL ?? "";
-  const snippet = `<form method="post" action="${appUrl}/api/intake/${intakeKey}">
-  <input name="name" placeholder="Name">
-  <input name="phone" placeholder="Phone" required>
-  <input name="website" hidden tabindex="-1" autocomplete="off">
-  <input type="hidden" name="consent_text" value="I agree to be contacted.">
-  <button>Send</button>
-</form>`;
+  const snippet = landingSnippet(process.env.APP_URL ?? "", intakeKey);
   const staff = people.filter((person) => person.role === "manager" || person.role === "agent");
   const brand = status.tenant.brand as Brand;
   const nameOf = (id: string) => people.find((person) => person.id === id)?.name ?? "Removed";
@@ -98,12 +96,12 @@ export default async function SetupPage({ params }: { params: Promise<{ tenantId
         <Item title="Meta dataset, to send results" state={status.dataset.state} detail={status.dataset.detail}>
           <ConnectionForm tenantId={tenantId} kind="dataset" idLabel="Dataset (Pixel) ID" secretLabel="Conversions API token" hint="Qualent sends each stage to this dataset, so Meta learns which leads were good." />
         </Item>
-        <Item title="Ad account, for spend" state={status.adAccount.state} detail={status.adAccount.detail}>
+        <Item title="Ad account, for spend" state={status.adAccount.state} detail={status.adAccountWarning ?? status.adAccount.detail}>
           <ConnectionForm tenantId={tenantId} kind="ad_account" idLabel="Ad account ID (act_…)" secretLabel="Access token" hint="Daily spend per campaign, used for cost per qualified lead." />
         </Item>
 
         <Item title="Telegram team group" state={status.teamGroup} detail={status.telegramConfigured ? undefined : "The bot token isn't set yet, so links and alerts won't work."}>
-          <p className="text-sm text-fg-muted">Add the bot to the group, then send this link there. It works once and expires in 15 minutes.</p>
+          <p className="text-sm text-fg-muted">Open this link on a phone and choose the team group. It adds the bot there. The link works once and expires in 15 minutes.</p>
           <LinkTelegram tenantId={tenantId} label="Create group link" />
         </Item>
 
@@ -154,6 +152,9 @@ export default async function SetupPage({ params }: { params: Promise<{ tenantId
                     {person.role === "field_agent" && <Pill tone={person.telegramChatId ? "good" : "warn"}>{person.telegramChatId ? "Telegram linked" : "Not linked"}</Pill>}
                     {person.inviteEmail && <Pill tone="warn">Invited: {person.inviteEmail}</Pill>}
                     {!person.active && <Pill tone="bad">Inactive</Pill>}
+                    {person.role !== "client_viewer" && person.role !== "field_agent" && <EditPerson tenantId={tenantId} person={person} timezone={status.tenant.timezone} />}
+                    {person.workingHours && <Pill>Set hours</Pill>}
+                    {person.recordScope === "assigned" && <Pill>Own leads only</Pill>}
                     <ActionForm action={setPersonActiveAction} hidden={{ tenantId, memberId: person.id, active: String(!person.active) }}>
                       <Submit variant="ghost" size="sm">{person.active ? "Deactivate" : "Reactivate"}</Submit>
                     </ActionForm>
@@ -180,7 +181,7 @@ export default async function SetupPage({ params }: { params: Promise<{ tenantId
         </Item>
 
         <Item title="Landing page form" state={status.tenant.intakeOrigins.length ? "done" : "todo"} detail={status.tenant.intakeOrigins.join(", ") || undefined}>
-          <p className="text-sm text-fg-muted">Paste this form on the landing page, and list the sites allowed to send leads.</p>
+          <p className="text-sm text-fg-muted">Paste this on the landing page, and list the sites allowed to send leads. It picks up campaign details by itself and works with the Meta Pixel.</p>
           <pre dir="ltr" className="overflow-x-auto rounded-dense bg-inner p-3 font-mono text-xs">{snippet}</pre>
           <div><CopyButton text={snippet} label="Copy form" /></div>
           <ActionForm action={originsAction} hidden={{ tenantId }} className="grid max-w-lg gap-3">
@@ -199,6 +200,19 @@ export default async function SetupPage({ params }: { params: Promise<{ tenantId
               <Link href={`/portal/${tenantId}`} className="self-center text-sm text-accent underline">See the client view</Link>
             </div>
           </ActionForm>
+        </Item>
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
+        <Label className="ps-1.5">Client settings</Label>
+        <Item title="Time zone, currency, retention and AI budget" state="done" detail={`${status.tenant.timezone}, ${status.tenant.currency}, keeps leads ${status.tenant.retentionDays} days`}>
+          <ClientSettings tenantId={tenantId} tenant={status.tenant} aiSpent={aiSpent} />
+        </Item>
+        <Item title="Pipeline stages" state="done" detail={pipelines[0]?.stages.map((stage) => stage.name).join(", ")}>
+          <PipelineStages tenantId={tenantId} list={pipelines[0]?.stages ?? []} />
+        </Item>
+        <Item title="Custom fields" state={fields.length ? "done" : "todo"} detail={fields.length ? fields.map((field) => field.label).join(", ") : "Optional"}>
+          <CustomFields tenantId={tenantId} fields={fields} />
         </Item>
       </div>
 

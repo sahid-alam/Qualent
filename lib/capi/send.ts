@@ -3,6 +3,7 @@ import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import { withTenant, type Db } from "../db/client.ts";
 import { capiEvents, connections, contacts, leads, touches } from "../db/schema.ts";
 import { decryptSecret } from "../crypto.ts";
+import { enqueue } from "../jobs/queues.ts";
 import { alertOps } from "../ops.ts";
 
 export const GRAPH_URL = process.env.META_GRAPH_URL ?? "https://graph.facebook.com/v26.0";
@@ -86,6 +87,10 @@ export async function sendCapiEvent(tenantId: string, eventRowId: string) {
   // A bad token or bad payload will not fix itself, so stop and tell a human.
   await record(tenantId, eventRowId, { status: "failed", lastError: detail.slice(0, 500) });
   await alertOps(`Meta rejected an event for tenant ${tenantId}: ${response.status}`);
+  const hour = new Date().toISOString().slice(0, 13);
+  await withTenant(tenantId, (db) =>
+    enqueue(db, "telegram", { type: "team_alert", tenantId, text: "Meta rejected a result. Check Meta results in Qualent." }, { singletonKey: `meta-error:${tenantId}:${hour}`, singletonSeconds: 3600 }),
+  );
 }
 
 async function prepare(db: Db, eventRowId: string) {

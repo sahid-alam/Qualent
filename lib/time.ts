@@ -32,3 +32,8 @@ export function lastDays(days: number, timezone: string, now = new Date()) {
   const format = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(date);
   return { from: format(new Date(now.getTime() - (days - 1) * 86_400_000)), to: format(now) };
 }
+
+/** The calendar day in a time zone, as YYYY-MM-DD. These sort and compare as plain strings. */
+export function localDay(date: Date, timezone: string) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(date);
+}

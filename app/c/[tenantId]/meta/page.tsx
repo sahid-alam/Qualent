@@ -24,6 +24,11 @@ export default async function MetaPage({ params }: { params: Promise<{ tenantId:
         </Banner>
       )}
       {status.dataset.state === "problem" && <Banner tone="bad">Meta rejected the dataset connection: {status.dataset.detail}</Banner>}
+      {status.page.state !== "todo" && stages.some((stage) => !stage.capiEnabled) && (
+        <Banner>
+          {stages.filter((stage) => !stage.capiEnabled).map((stage) => stage.name).join(", ")} {stages.filter((stage) => !stage.capiEnabled).length === 1 ? "is" : "are"} off. This client uses Meta forms, and Meta needs every stage, including the first, or it may stop optimizing for quality.
+        </Banner>
+      )}
       {!health.meetsLeadVolume && (
         <Banner>
           {health.leadsLast30Days} leads in the last 30 days. Meta&apos;s lead optimization needs about 200 a month. Events still send, but Meta may not optimize on them yet.
