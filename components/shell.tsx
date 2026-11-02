@@ -1,28 +1,24 @@
 "use client";
 
-import { Activity, BarChart3, CalendarCheck, ChevronsUpDown, Inbox, KanbanSquare, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Radio, Search, Settings2, Sun, Table2, Zap, type LucideIcon } from "lucide-react";
+import { BarChart3, CalendarCheck, ChevronsUpDown, LogOut, Menu, Moon, Search, Settings2, Sun, Table2, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, type ReactNode } from "react";
-import { Avatar, cx, initials, Kbd, Label } from "./ui";
+import { Avatar, cx, initials } from "./ui";
 
 const ICONS: Record<string, LucideIcon> = {
   today: CalendarCheck,
-  inbox: Inbox,
-  pipeline: KanbanSquare,
   leads: Table2,
-  automations: Zap,
   reports: BarChart3,
-  meta: Radio,
   setup: Settings2,
   more: Menu,
-  system: Activity,
 };
 
-export type NavItem = { href: string; label: string; icon: keyof typeof ICONS; group: string; badge?: number; urgent?: boolean; primary?: boolean; compactOnly?: boolean };
+/** `also` lists the other pages that belong to this item, shown as tabs inside it. */
+export type NavItem = { href: string; label: string; icon: keyof typeof ICONS; also?: string[]; badge?: number; urgent?: boolean; primary?: boolean; compactOnly?: boolean };
 
-function isActive(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(`${href}/`);
+function isActive(pathname: string, item: NavItem) {
+  return [item.href, ...(item.also ?? [])].some((href) => pathname === href || pathname.startsWith(`${href}/`));
 }
 
 const iconButton = "grid size-7 shrink-0 place-items-center rounded-full text-fg-muted hover:bg-hover hover:text-fg pointer-coarse:size-11";
@@ -37,8 +33,6 @@ export function Sidebar({
   theme,
   toggleTheme,
   signOut,
-  collapsed,
-  toggleSidebar,
 }: {
   items: NavItem[];
   tenants: { id: string; name: string }[];
@@ -49,8 +43,6 @@ export function Sidebar({
   theme: string;
   toggleTheme: () => Promise<void>;
   signOut: () => Promise<void>;
-  collapsed: boolean;
-  toggleSidebar: () => Promise<void>;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -60,7 +52,7 @@ export function Sidebar({
     const focusSearch = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "k") {
         event.preventDefault();
-        // The box is hidden on a narrow sidebar, so go to the search on All leads instead.
+        // The box is hidden on a narrow sidebar, so go to the search on Leads instead.
         if (search.current?.offsetParent) search.current.focus();
         else router.push(`/c/${currentTenant}/leads`);
       }
@@ -69,10 +61,8 @@ export function Sidebar({
     return () => window.removeEventListener("keydown", focusSearch);
   }, [currentTenant, router]);
 
-  const groups = [...new Set(items.map((item) => item.group))];
-
   return (
-    <aside data-sidebar={collapsed ? "closed" : "open"} className="sticky top-2.5 hidden h-[calc(100dvh-1.25rem)] w-(--w-rail) shrink-0 flex-col rounded-panel border border-line bg-sidebar px-2.5 py-3.5 sm:flex full:w-(--w-sidebar)">
+    <aside className="sticky top-2.5 hidden h-[calc(100dvh-1.25rem)] w-(--w-rail) shrink-0 flex-col rounded-panel border border-line bg-sidebar px-2.5 py-3.5 sm:flex full:w-(--w-sidebar)">
       <div className="flex flex-col items-center justify-center gap-2.5 full:flex-row full:justify-start full:px-1">
         <Link href={`/c/${currentTenant}/today`} title={clientName} className="grid size-8.5 shrink-0 place-items-center rounded-full bg-(image:--gradient-accent) text-sm font-bold text-on-accent shadow-glow">
           {initials(clientName)}
@@ -100,60 +90,43 @@ export function Sidebar({
           )}
           <p className="text-2xs text-fg-muted">Qualent</p>
         </div>
-        <form action={toggleSidebar} className="hidden wide:block">
-          <button className={iconButton} title={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed}>
-            {collapsed ? <PanelLeftOpen size={15} aria-hidden className="rtl:rotate-180" /> : <PanelLeftClose size={15} aria-hidden className="rtl:rotate-180" />}
-            <span className="sr-only">{collapsed ? "Expand sidebar" : "Collapse sidebar"}</span>
-          </button>
-        </form>
       </div>
 
       <form action={`/c/${currentTenant}/leads`} role="search" className="mt-3 hidden h-9.5 shrink-0 items-center gap-2.5 rounded-full border border-line bg-control px-3.5 full:flex">
         <Search size={14} aria-hidden className="shrink-0 text-fg-muted" />
         <label className="sr-only" htmlFor="nav-search">Search leads</label>
-        <input ref={search} id="nav-search" name="q" type="search" placeholder="Search…" className="min-w-0 flex-1 bg-transparent text-sm text-fg placeholder:text-fg-muted" />
-        <Kbd>⌘K</Kbd>
+        <input ref={search} id="nav-search" name="q" type="search" placeholder="Search leads…" className="min-w-0 flex-1 bg-transparent text-sm text-fg placeholder:text-fg-muted" />
       </form>
 
-      <nav aria-label="Main" className="relative mt-1.5 min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-        {groups.map((group) => (
-          <div key={group}>
-            {items.some((item) => item.group === group && !item.compactOnly) && <Label className="mt-4 hidden px-3.5 pb-2 full:block">{group}</Label>}
-            <div aria-hidden className="mx-2 my-3 h-px bg-line full:hidden" />
-            <div className="grid gap-0.75">
-              {items
-                .filter((item) => item.group === group)
-                .map((item) => {
-                  const Icon = ICONS[item.icon];
-                  const active = isActive(pathname, item.href);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      aria-current={active ? "page" : undefined}
-                      title={item.label}
-                      className={cx(
-                        "relative h-(--control-lg) items-center justify-center gap-2.75 rounded-full border px-3.5 text-base transition duration-(--dur-fast) full:justify-start",
-                        item.compactOnly ? "flex full:hidden" : "flex",
-                        active
-                          ? "border-accent-line bg-(image:--gradient-accent) font-medium text-on-accent shadow-nav full:bg-(image:--gradient-nav) full:text-fg"
-                          : "border-transparent text-fg-muted hover:bg-hover hover:text-fg",
-                      )}
-                    >
-                      <Icon size={17} aria-hidden className="shrink-0" />
-                      <span className="sr-only full:not-sr-only full:flex-1">{item.label}</span>
-                      {!!item.badge && (
-                        <>
-                          <span className={cx("sr-only full:not-sr-only full:shrink-0 full:text-2xs full:tabular-nums", item.urgent ? "full:rounded-full full:bg-(image:--gradient-accent) full:px-2 full:py-0.5 full:font-semibold full:text-on-accent" : "full:text-fg-muted")}>{item.badge}</span>
-                          <span aria-hidden className="absolute end-1.5 top-1.5 size-1.75 rounded-full bg-accent shadow-glow full:hidden" />
-                        </>
-                      )}
-                    </Link>
-                  );
-                })}
-            </div>
-          </div>
-        ))}
+      <nav aria-label="Main" className="relative mt-4 grid min-h-0 flex-1 content-start gap-0.75 overflow-x-hidden overflow-y-auto">
+        {items.map((item) => {
+          const Icon = ICONS[item.icon];
+          const active = isActive(pathname, item);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={active ? "page" : undefined}
+              title={item.label}
+              className={cx(
+                "relative h-(--control-lg) items-center justify-center gap-2.75 rounded-full border px-3.5 text-base transition duration-(--dur-fast) full:justify-start",
+                item.compactOnly ? "flex full:hidden" : "flex",
+                active
+                  ? "border-accent-line bg-(image:--gradient-accent) font-medium text-on-accent shadow-nav full:bg-(image:--gradient-nav) full:text-fg"
+                  : "border-transparent text-fg-muted hover:bg-hover hover:text-fg",
+              )}
+            >
+              <Icon size={17} aria-hidden className="shrink-0" />
+              <span className="sr-only full:not-sr-only full:flex-1">{item.label}</span>
+              {!!item.badge && (
+                <>
+                  <span className={cx("sr-only full:not-sr-only full:shrink-0 full:text-2xs full:tabular-nums", item.urgent ? "full:rounded-full full:bg-(image:--gradient-accent) full:px-2 full:py-0.5 full:font-semibold full:text-on-accent" : "full:text-fg-muted")}>{item.badge}</span>
+                  <span aria-hidden className="absolute end-1.5 top-1.5 size-1.75 rounded-full bg-accent shadow-glow full:hidden" />
+                </>
+              )}
+            </Link>
+          );
+        })}
       </nav>
 
       <div className="mt-2.5 flex flex-col items-center gap-1 rounded-card bg-card p-1.5 full:flex-row full:gap-1.5 full:rounded-full">
@@ -162,7 +135,6 @@ export function Sidebar({
           <p className="truncate text-sm font-medium">{userName}</p>
           <p className="truncate text-2xs text-fg-muted">{userRole}</p>
         </div>
-        <span title="Signed in" aria-hidden className="hidden size-1.5 shrink-0 rounded-full bg-good shadow-live full:block" />
         <form action={toggleTheme}>
           <button className={iconButton} title="Switch theme">
             {theme === "dark" ? <Sun size={15} aria-hidden /> : <Moon size={15} aria-hidden />}
@@ -188,7 +160,7 @@ export function BottomBar({ items }: { items: NavItem[] }) {
         .filter((item) => item.primary)
         .map((item) => {
           const Icon = ICONS[item.icon];
-          const active = isActive(pathname, item.href);
+          const active = isActive(pathname, item);
           return (
             <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cx("flex h-14 min-w-14 flex-col items-center justify-center gap-0.5 text-2xs", active ? "text-accent" : "text-fg-muted")}>
               <Icon size={19} aria-hidden />

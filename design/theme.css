@@ -22,14 +22,8 @@
 
 /* `dark:` follows the attribute, so a tenant/user toggle works without media queries. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-/* The full sidebar: wide screens only, and only while it isn't collapsed. */
-@custom-variant full {
-  @media (width >= 87.5rem) {
-    &:where([data-sidebar="open"], [data-sidebar="open"] *) {
-      @slot;
-    }
-  }
-}
+/* The full sidebar, with labels: any laptop or larger. Below this it's an icon rail. */
+@custom-variant full (@media (width >= 64rem));
 
 /* -----------------------------------------------------------------------------
    1. Tenant brand hook (defaults = Ember orange)

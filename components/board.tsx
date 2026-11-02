@@ -1,42 +1,40 @@
 "use client";
 
-import { DndContext, KeyboardSensor, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import Link from "next/link";
 import { useId, useOptimistic, useState, useTransition } from "react";
 import { moveStageAction } from "../app/c/[tenantId]/actions";
-import { GripVertical } from "lucide-react";
+import { ArrowRightLeft } from "lucide-react";
 import { Avatar, Banner, cx, LinkButton, ScorePill } from "./ui";
 
 export type BoardStage = { id: string; name: string; kind: string };
 export type BoardCard = { id: string; stageId: string; name: string; temperature: string | null; score: number | null; delivered: boolean; owner: string | null };
 
 function Card({ card, stages, tenantId, onMove }: { card: BoardCard; stages: BoardStage[]; tenantId: string; onMove: (leadId: string, stageId: string) => void }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: card.id });
+  const { listeners, setNodeRef, transform, isDragging } = useDraggable({ id: card.id });
   return (
     <li
       ref={setNodeRef}
+      {...listeners}
       style={transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : undefined}
-      className={cx("grid gap-2.5 rounded-row border border-line bg-panel p-3.5 transition-colors duration-(--dur-fast) hover:border-line-hover", isDragging && "relative z-10 shadow-pop")}
+      className={cx("flex cursor-grab items-center gap-2.5 rounded-row border border-line bg-panel p-3.5 transition-colors duration-(--dur-fast) hover:border-line-hover", isDragging && "relative z-10 shadow-pop")}
     >
-      <div className="flex items-center gap-2.5">
-        <Avatar name={card.name} size="sm" />
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.75">
-            <Link href={`/c/${tenantId}/leads/${card.id}`} className="min-w-0 truncate text-sm font-semibold hover:underline">{card.name}</Link>
-            <ScorePill temperature={card.temperature} score={card.score} />
-          </span>
-          <span className="block truncate text-2xs text-fg-muted">{card.owner ?? "No owner"}</span>
+      <Avatar name={card.name} size="sm" />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.75">
+          <Link href={`/c/${tenantId}/leads/${card.id}`} draggable={false} className="min-w-0 truncate text-sm font-semibold hover:underline">{card.name}</Link>
+          <ScorePill temperature={card.temperature} score={card.score} />
         </span>
-        <button {...listeners} {...attributes} aria-label={`Drag ${card.name}`} className="grid size-7 shrink-0 cursor-grab touch-none place-items-center rounded-full text-fg-muted hover:bg-hover hover:text-fg pointer-coarse:size-11">
-          <GripVertical size={14} aria-hidden />
-        </button>
-      </div>
-      <label className="text-xs text-fg-muted">
+        <span className="block truncate text-2xs text-fg-muted">{card.owner ?? "No owner"}</span>
+      </span>
+      {/* The keyboard and touch way to move: a native dropdown behind a small icon. */}
+      <label title="Move to another stage" className="relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-full text-fg-muted hover:bg-hover hover:text-fg has-focus-visible:outline-2 has-focus-visible:outline-ring pointer-coarse:size-11">
+        <ArrowRightLeft size={14} aria-hidden />
         <span className="sr-only">Move {card.name} to</span>
         <select
           value=""
           onChange={(event) => onMove(card.id, event.target.value)}
-          className="h-8 w-full rounded-full border border-line bg-control px-3 text-xs text-fg-muted pointer-coarse:h-11"
+          className="absolute inset-0 cursor-pointer opacity-0"
         >
           <option value="" disabled className="bg-panel">Move to…</option>
           {stages.filter((stage) => stage.id !== card.stageId).map((stage) => (
@@ -67,7 +65,7 @@ function Column({ stage, cards, stages, tenantId, onMove }: { stage: BoardStage;
 
 export function Board({ tenantId, stages, cards }: { tenantId: string; stages: BoardStage[]; cards: BoardCard[] }) {
   const id = useId();
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [justQualified, setJustQualified] = useState<BoardCard | null>(null);

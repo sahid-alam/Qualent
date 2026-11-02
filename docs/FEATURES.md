@@ -1,5 +1,89 @@
 # Feature List
 
+## What the app does, screen by screen
+
+Status: updated 2026-11-02 after the screens were simplified to four menu items. "Needs keys" means the code exists and is tested locally, but has never run against the real service.
+
+### Who uses it
+| Person | Where | What they do |
+|---|---|---|
+| 7Gence staff (agent) | Today, Leads | Call leads, log results, send qualified leads on |
+| 7Gence manager | Everything except System | Also assign leads, see the team's numbers, change settings |
+| 7Gence admin | Everything | Also add clients and watch System health |
+| Client's sales agent | Telegram only, no login | Gets qualified leads, taps Contacted, Viewing, Won or Lost |
+| Client | Client report, no lead records | Sees cost per qualified lead on their own branded page |
+
+### 1. Today: who to call next
+| Feature | What it does | Status |
+|---|---|---|
+| Call list | Leads waiting on you, best first, with one big Call button on the top lead | Works |
+| Follow-ups due | Tasks due today or late, with a Done button | Works |
+| Reminders | Shows only when needed: leads with no owner, or a connection still missing | Works |
+
+### 2. Leads: every lead, three ways to see them
+| Tab | What it does | Status |
+|---|---|---|
+| New | Leads nobody owns, oldest first. Tick and assign | Works |
+| All | Search, filter by stage or temperature, bulk edit, CSV import and export | Works |
+| Board | Drag leads between stages, or use the move icon on the card | Works |
+
+Adding a lead by hand is on all three tabs.
+
+### 3. Lead page: one person
+| Feature | What it does | Status |
+|---|---|---|
+| Call and stage | Call button and a stage dropdown at the top | Works |
+| Log a call | Pick the result, save. Two clicks | Works |
+| Notes | Notes and calls, newest at the bottom | Works |
+| Follow-ups | Add one with a date. It then shows on Today | Works |
+| Send to client's agent | Appears once a lead is qualified. Sends it on Telegram | Screen works, sending needs keys |
+| AI summary, score, next step, reply draft | Suggestions only, never sent by itself | Needs an AI model chosen |
+| History and privacy | Folded away: what happened, consent, export or erase | Works |
+
+### 4. Reports: did the ads work
+| Feature | What it does | Status |
+|---|---|---|
+| Client report | Leads, cost per lead, cost per qualified lead, deals per campaign | Works on sample data; real spend needs Meta keys |
+| Team report | Leads per person, first reply time, leads reaching each stage | Works |
+| Client view | The same report with the client's name, logo and color | Works |
+| Weekly ad analysis | AI draft that staff approve before the client sees it | Needs an AI model chosen |
+
+### 5. Settings: set up once, then leave alone
+| Tab | What it does | Status |
+|---|---|---|
+| Setup | Connect Meta and Telegram, choose who gets leads, add people, landing page form, test lead. Optional: branding, time zone, stages, custom fields | Screen works, connections need keys |
+| Meta | Which stages are sent to Meta, send a test event, events sent and failed | Screen works, sending needs keys |
+| Automations | Rules such as "enters Viewing, wait 1 day, create a task" | Works; timed steps need the scheduler or `npm run worker` |
+| System | 7Gence admins only: scheduler, failed jobs, health per client, AI models | Works |
+
+### Happens by itself
+| Feature | What it does | Status |
+|---|---|---|
+| Meta form leads | Arrive by webhook, with a check every 15 minutes for any missed | Needs keys |
+| Landing page leads | Arrive from a pasted form, with ad tracking | Tested locally |
+| Duplicate check | Same phone or email updates the same person | Works |
+| Auto-assign | Takes turns or uses rules, within working hours | Works |
+| Reassign if no reply | Moves the lead on and tells the manager | Works |
+| Telegram alerts | New lead, hot lead, no reply, Meta errors | Needs keys |
+| Results to Meta | Each stage change is sent once, hashed, with retries, within Meta's 7-day limit | Needs keys |
+| Ad spend sync | Daily spend per campaign, for the cost numbers | Needs keys |
+| Auto-delete | Removes old data per client's retention setting | Works |
+
+### Not built yet
+Staff two-step login (MFA), invite emails and password reset. All three need Supabase. These should be finished before the first client.
+
+## Connecting Meta: what's needed
+
+1. **Meta Business Verification**, then App Review for lead access. Outside our control, and it can take weeks.
+2. **Hosting first.** Meta webhooks need a public address, so Supabase and Vercel come before Meta. Steps are in [DEPLOY.md](DEPLOY.md).
+3. **App keys** in the environment: `META_APP_SECRET`, `META_VERIFY_TOKEN`.
+4. **For each client**, in Settings > Setup: Facebook Page ID and token, dataset (Pixel) ID and Conversions API token, ad account ID and token.
+5. **Check it** with Settings > Meta > Send a test event, then a Meta test lead.
+
+---
+
+## Original feature decisions
+
 Status: updated 2026-11-01 with your Checkpoint 1 answers and your four architecture decisions (1a, 2b, 3a, 4b).
 
 Words used below:

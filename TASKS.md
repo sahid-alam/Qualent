@@ -8,6 +8,13 @@ Legend: [x] done · [~] in progress · [ ] not started · [!] waiting on you
 - [x] Flows approved 2026-11-01, with the defaults for each "Your call"
 - [x] CLAUDE.md and .claude/settings.json
 
+## Simplified screens (2026-11-02, before connecting Meta)
+- [x] Menu cut from 8 items to 4: Today, Leads, Reports, Settings. New, All and Board are tabs in Leads; Setup, Meta, Automations and System are tabs in Settings
+- [x] Today is only the call list and follow-ups; numbers moved to Reports, connections to Settings
+- [x] Lead page: two panels, stage dropdown instead of a row of buttons, folded history and details
+- [x] Bulk controls show only once a row is ticked; filters apply on pick; board cards have no permanent dropdown
+- [x] docs/FEATURES.md lists every feature by screen, with status and what Meta needs
+
 ## Waiting on you
 - [!] Review the screens
 - [!] Keys and accounts when ready: Supabase, Vercel, Telegram bot, Meta app, Sentry

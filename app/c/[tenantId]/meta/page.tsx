@@ -2,21 +2,23 @@ import { guardPage } from "../../../../lib/auth/session.ts";
 import { capiHealth } from "../../../../lib/capi/send.ts";
 import { listPipelines, setupStatus } from "../../../../lib/settings.ts";
 import { ActionForm, Submit } from "../../../../components/forms";
-import { Banner, Field, inlineFieldClass, inputClass, Label, LinkButton, PageHeader, Panel, Stat, timeAgo } from "../../../../components/ui";
+import { Banner, Field, inlineFieldClass, inputClass, Label, LinkButton, PageHeader, Panel, SettingsTabs, Stat, timeAgo } from "../../../../components/ui";
 import { testEventAction, updateStageAction } from "../actions";
 
 export const metadata = { title: "Meta results · Qualent" };
 
 export default async function MetaPage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = await params;
-  await guardPage(tenantId, "settings.manage");
+  const { membership } = await guardPage(tenantId, "settings.manage");
   const [health, pipelines, status] = await Promise.all([capiHealth(tenantId), listPipelines(tenantId), setupStatus(tenantId)]);
   const stages = pipelines[0]?.stages ?? [];
   const count = (key: string) => health.status[key] ?? 0;
 
   return (
     <>
-      <PageHeader title="Meta results" subtitle="Whether Meta is getting your results, so it can find more people like your best leads." />
+      <PageHeader title="Settings" />
+      <SettingsTabs tenantId={tenantId} active="meta" isAdmin={membership.role === "platform_admin"} />
+      <p className="max-w-[70ch] text-sm text-fg-muted">Whether Meta is getting your results, so it can find more people like your best leads.</p>
 
       {status.dataset.state === "todo" && (
         <Banner action={<LinkButton size="sm" href={`/c/${tenantId}/setup`}>Go to setup</LinkButton>}>

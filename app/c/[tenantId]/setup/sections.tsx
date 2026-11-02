@@ -60,7 +60,7 @@ export function PipelineStages({ tenantId, list }: { tenantId: string; list: (ty
 export function CustomFields({ tenantId, fields }: { tenantId: string; fields: (typeof customFieldDefs.$inferSelect)[] }) {
   return (
     <>
-      <p className="text-sm text-fg-muted">Extra details for this client&apos;s leads, like budget or area. They show on the lead page and as filters in All leads.</p>
+      <p className="text-sm text-fg-muted">Extra details for this client&apos;s leads, like budget or area. They show on the lead page and as filters in Leads.</p>
       {!!fields.length && (
         <TableWrap>
           <thead><tr><th>Field</th><th>Type</th><th>Choices</th><th><span className="sr-only">Remove</span></th></tr></thead>

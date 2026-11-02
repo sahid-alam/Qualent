@@ -164,10 +164,6 @@ export function PersonLink({ name, href }: { name: string; href: string }) {
   );
 }
 
-export function Kbd({ children, onAccent }: { children: ReactNode; onAccent?: boolean }) {
-  return <kbd className={cx("rounded-full px-1.75 py-px font-mono text-2xs", onAccent ? "border border-on-accent/40 text-on-accent" : "border border-line-strong text-fg-muted")}>{children}</kbd>;
-}
-
 /** Tabs that are links, so the choice lives in the URL and works without script. */
 export function Segmented({ label, items }: { label: string; items: { href: string; label: ReactNode; active: boolean }[] }) {
   return (
@@ -183,6 +179,37 @@ export function Segmented({ label, items }: { label: string; items: { href: stri
         </Link>
       ))}
     </nav>
+  );
+}
+
+/** The tabs inside Leads. Staff limited to their own leads don't assign new ones, so they skip New. */
+export function LeadsTabs({ tenantId, active, showNew = true }: { tenantId: string; active: "new" | "all" | "board"; showNew?: boolean }) {
+  const base = `/c/${tenantId}`;
+  const tabs = [
+    ...(showNew ? [{ key: "new", href: `${base}/inbox`, label: "New" }] : []),
+    { key: "all", href: `${base}/leads`, label: "All" },
+    { key: "board", href: `${base}/pipeline`, label: "Board" },
+  ];
+  return (
+    <div className="max-w-xs">
+      <Segmented label="Lead views" items={tabs.map((tab) => ({ href: tab.href, label: tab.label, active: tab.key === active }))} />
+    </div>
+  );
+}
+
+/** The tabs inside Settings. */
+export function SettingsTabs({ tenantId, active, isAdmin }: { tenantId: string; active: "setup" | "meta" | "automations"; isAdmin: boolean }) {
+  const base = `/c/${tenantId}`;
+  const tabs = [
+    { key: "setup", href: `${base}/setup`, label: "Setup" },
+    { key: "meta", href: `${base}/meta`, label: "Meta" },
+    { key: "automations", href: `${base}/automations`, label: "Automations" },
+    ...(isAdmin ? [{ key: "system", href: "/ops", label: "System" }] : []),
+  ];
+  return (
+    <div className="max-w-md">
+      <Segmented label="Settings" items={tabs.map((tab) => ({ href: tab.href, label: tab.label, active: tab.key === active }))} />
+    </div>
   );
 }
 

@@ -48,11 +48,6 @@ export async function toggleThemeAction() {
   store.set("qualent_theme", next, { sameSite: "lax", maxAge: THIRTY_DAYS * 12 });
 }
 
-export async function toggleSidebarAction() {
-  const store = await cookies();
-  store.set("qualent_sidebar", store.get("qualent_sidebar")?.value === "closed" ? "open" : "closed", { sameSite: "lax", maxAge: THIRTY_DAYS * 12 });
-}
-
 export async function requireSignedIn() {
   return currentUserId();
 }

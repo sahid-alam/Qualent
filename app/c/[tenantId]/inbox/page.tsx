@@ -2,7 +2,7 @@ import { guardPage } from "../../../../lib/auth/session.ts";
 import { listCampaigns, listInbox, listRoutableMembers } from "../../../../lib/queries.ts";
 import { AddLead } from "../../../../components/add-lead";
 import { ActionForm, SelectAll, Submit } from "../../../../components/forms";
-import { Empty, inlineFieldClass, PageHeader, PersonLink, SOURCE_LABEL, TableWrap, Temperature, timeAgo } from "../../../../components/ui";
+import { Empty, inlineFieldClass, LeadsTabs, PageHeader, PersonLink, SOURCE_LABEL, TableWrap, Temperature, timeAgo } from "../../../../components/ui";
 import { bulkEditAction } from "../actions";
 
 export const metadata = { title: "New leads · Qualent" };
@@ -15,18 +15,19 @@ export default async function InboxPage({ params }: { params: Promise<{ tenantId
   return (
     <>
       <PageHeader
-        title="New leads"
-        subtitle="Leads nobody owns yet, oldest first. Waiting the longest means most at risk."
+        title="Leads"
+        subtitle="Nobody owns these yet. Oldest first, because waiting longest means most at risk."
         actions={<AddLead tenantId={tenantId} campaigns={campaigns} />}
       />
+      <LeadsTabs tenantId={tenantId} active="new" showNew={membership.recordScope !== "assigned"} />
       {!rows.length ? (
         <Empty
           clear
           title={membership.recordScope === "assigned" ? "Your manager handles new leads" : "No leads are waiting"}
-          body={membership.recordScope === "assigned" ? "Leads assigned to you appear on your Today list and in All leads." : "New leads with no owner appear here. Set up who gets leads in Client setup, and most will go straight to a person."}
+          body={membership.recordScope === "assigned" ? "Leads assigned to you appear on your Today list." : "Set up who gets leads in Settings, and most will go straight to a person."}
         />
       ) : (
-        <ActionForm action={bulkEditAction} hidden={{ tenantId }} className="grid gap-3" resetOnOk>
+        <ActionForm action={bulkEditAction} hidden={{ tenantId }} className="group grid gap-3" resetOnOk>
           <TableWrap>
             <thead>
               <tr>
@@ -53,10 +54,11 @@ export default async function InboxPage({ params }: { params: Promise<{ tenantId
               ))}
             </tbody>
           </TableWrap>
-          <div className="flex flex-wrap items-center gap-2">
+          <p className="ps-1 text-sm text-fg-muted group-has-[input[type=checkbox]:checked]:hidden">Tick leads to assign them.</p>
+          <div className="hidden flex-wrap items-center gap-2 group-has-[input[type=checkbox]:checked]:flex">
             <label className="sr-only" htmlFor="owner">Assign to</label>
             <select id="owner" name="ownerMemberId" defaultValue="" className={`${inlineFieldClass} max-w-60`}>
-              <option value="" className="bg-panel">Assign ticked leads to…</option>
+              <option value="" className="bg-panel">Assign to…</option>
               {people.map((person) => (
                 <option key={person.id} value={person.id} className="bg-panel">{person.name}</option>
               ))}
