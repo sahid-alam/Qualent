@@ -1,24 +1,26 @@
 import { eq } from "drizzle-orm";
-import { ArrowRight, Check, ChevronDown, ChevronLeft, Phone } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, Phone } from "lucide-react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import type { ReactNode } from "react";
 import { guardPage } from "../../../../../lib/auth/session.ts";
 import { withTenant } from "../../../../../lib/db/client.ts";
 import { tenants } from "../../../../../lib/db/schema.ts";
 import { getLead } from "../../../../../lib/leads/work.ts";
-import { listFieldAgents, listQueue, listRoutableMembers } from "../../../../../lib/queries.ts";
+import { listFieldAgents, listQueue, listRoutableMembers, queueCounts, type QueueTab } from "../../../../../lib/queries.ts";
 import { hasAiModel, listCustomFields, listPipelines } from "../../../../../lib/settings.ts";
 import { ActionForm, Submit } from "../../../../../components/forms";
-import { Composer, StageSelect } from "../../../../../components/lead-tools";
-import { Avatar, Banner, buttonClass, cx, Field, formatDateTime, inlineFieldClass, inputClass, Label, Pill, SOURCE_LABEL, TemperatureBadge, timeAgo } from "../../../../../components/ui";
-import { addTaskAction, completeTaskAction, deliverAction, setFieldsAction } from "../../actions";
+import { LeadQueue } from "../../../../../components/lead-queue";
+import { Composer } from "../../../../../components/lead-tools";
+import { Avatar, Banner, buttonClass, cx, Field, formatDateTime, inlineFieldClass, inputClass, Label, Pill, ScoreRing, SOURCE_LABEL, TemperatureBadge, timeAgo } from "../../../../../components/ui";
+import { addTaskAction, completeTaskAction, deliverAction, moveStageAction, setFieldsAction } from "../../actions";
 
 export const metadata = { title: "Lead · Qualent" };
 
 const CALL_LABEL: Record<string, string> = { reached: "reached", no_answer: "no answer", wrong_number: "wrong number", call_back: "call back" };
 const ACTIVITY_DOT: Record<string, string> = { assignment: "bg-info", stage: "bg-accent", delivery: "bg-good", ai: "bg-chart-5", system: "bg-fg-muted" };
 const innerClass = "rounded-card border border-line bg-inner px-4 py-3.5";
+const tempCard = { hot: "border-hot-line bg-hot-soft", warm: "border-warm-line bg-warm-soft", cold: "border-cold-line bg-cold-soft" };
+const tempDot = { hot: "bg-hot", warm: "bg-warm", cold: "bg-cold" };
 
 function actorName(actor: string, names: Map<string, string>) {
   if (actor.startsWith("telegram:")) return names.get(actor.slice(9)) ?? "Client's agent";
@@ -27,7 +29,7 @@ function actorName(actor: string, names: Map<string, string>) {
 }
 
 /** Notes from people on the team sit on one side; what came in from the lead sits on the other. */
-function Bubble({ who, when, from, children }: { who: string; when: string; from: "lead" | "team"; children: ReactNode }) {
+function Bubble({ who, when, from, children }: { who: string; when: string; from: "lead" | "team"; children: React.ReactNode }) {
   const lead = from === "lead";
   return (
     <div className={cx("flex", lead ? "justify-start" : "justify-end")}>
@@ -36,42 +38,30 @@ function Bubble({ who, when, from, children }: { who: string; when: string; from
           <span className="font-medium text-fg-soft">{who}</span>
           <span>{when}</span>
         </p>
-        <div className={cx("rounded-card border px-4.25 py-3.25 text-base leading-relaxed whitespace-pre-line", lead ? "rounded-es-lg border-accent-line bg-(image:--gradient-highlight)" : "rounded-ee-lg border-line bg-control-hover")}>{children}</div>
+        <div className={cx("rounded-[1.375rem] border px-4.25 py-3.25 text-base leading-relaxed whitespace-pre-line", lead ? "rounded-es-lg border-accent-line bg-(image:--gradient-highlight)" : "rounded-ee-lg border-line bg-control-hover")}>{children}</div>
       </div>
     </div>
   );
 }
 
-/** A closed-by-default section of the side panel, so only what's needed now takes up room. */
-function Fold({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
-  return (
-    <details className="group border-t border-line pt-3.5">
-      <summary className="flex min-h-7 cursor-pointer list-none items-center justify-between gap-2 ps-1 pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
-        <Label>{title}</Label>
-        <span className="flex items-center gap-1.5 text-xs text-fg-muted tabular-nums">
-          {count || ""}
-          <ChevronDown size={14} aria-hidden className="transition group-open:rotate-180" />
-        </span>
-      </summary>
-      <div className="mt-2.5">{children}</div>
-    </details>
-  );
-}
-
-export default async function LeadPage({ params }: { params: Promise<{ tenantId: string; leadId: string }> }) {
+export default async function LeadPage({ params, searchParams }: { params: Promise<{ tenantId: string; leadId: string }>; searchParams: Promise<{ tab?: string; t?: string }> }) {
   const { tenantId, leadId } = await params;
   const { membership, can } = await guardPage(tenantId, "leads.read");
   const data = await getLead(tenantId, leadId, membership);
   if (!data) notFound();
 
-  const [[tenant], pipelines, agents, people, fields, canDraft, queue] = await Promise.all([
+  const search = await searchParams;
+  const tab = (["needs", "waiting", "done"] as const).find((value): value is QueueTab => value === search.tab) ?? "needs";
+  const temperature = (["hot", "warm", "cold"] as const).find((value) => value === search.t);
+  const [[tenant], pipelines, agents, people, fields, canDraft, queue, counts] = await Promise.all([
     withTenant(tenantId, (db) => db.select().from(tenants).where(eq(tenants.id, tenantId))),
     listPipelines(tenantId),
     listFieldAgents(tenantId),
     listRoutableMembers(tenantId),
     listCustomFields(tenantId),
     hasAiModel(tenantId, "draft_reply"),
-    listQueue(tenantId, membership, { tab: "needs" }),
+    listQueue(tenantId, membership, { tab, temperature }),
+    queueCounts(tenantId, membership),
   ]);
   const { lead, contact, stage, timeline, touches, tasks } = data;
   const pipeline = pipelines.find((item) => item.id === lead.pipelineId);
@@ -88,24 +78,28 @@ export default async function LeadPage({ params }: { params: Promise<{ tenantId:
 
   const said = timeline.filter((item) => item.kind === "note" || item.kind === "call").reverse();
   const happened = timeline.filter((item) => item.kind !== "note" && item.kind !== "call");
-  const position = queue.findIndex((row) => row.lead.id === leadId);
+  const queueIds = queue.map((row) => row.lead.id);
+  const position = queueIds.indexOf(leadId);
   const nextRow = position >= 0 ? queue[position + 1] : queue[0];
+  const queueSuffix = [tab !== "needs" && `tab=${tab}`, temperature && `t=${temperature}`].filter(Boolean).join("&");
   const nextLink = nextRow && nextRow.lead.id !== leadId && (
-    <Link href={`/c/${tenantId}/leads/${nextRow.lead.id}`} className="inline-flex items-center gap-1 text-xs text-fg-muted hover:text-fg">
+    <Link href={`/c/${tenantId}/leads/${nextRow.lead.id}${queueSuffix ? `?${queueSuffix}` : ""}`} className="inline-flex items-center gap-1 text-xs text-fg-muted hover:text-fg">
       Next: {nextRow.contact.name ?? "next lead"}
       <ArrowRight size={12} aria-hidden className="rtl:rotate-180" />
     </Link>
   );
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-2.5 lg:h-[calc(100dvh-1.25rem)] lg:grid-cols-[minmax(0,1fr)_var(--w-detail)] lg:grid-rows-[minmax(0,1fr)]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-2.5 lg:h-[calc(100dvh-1.25rem)] lg:grid-cols-[minmax(0,1fr)_var(--w-detail)] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[var(--w-queue)_minmax(0,1fr)_var(--w-detail)]">
+      <LeadQueue tenantId={tenantId} currentId={leadId} rows={queue} counts={counts} tab={tab} temperature={temperature} timezone={tenant.timezone} />
+
       <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-panel border border-line bg-panel bg-(image:--wash-hero) bg-size-[100%_18.75rem] bg-no-repeat">
         <header className="border-b border-line px-5 pt-5 pb-4.5 sm:px-6">
-          <Link href={`/c/${tenantId}/leads`} className="mb-3 inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg">
+          <Link href={`/c/${tenantId}/leads`} className="mb-3 inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg desk:hidden">
             <ChevronLeft size={14} aria-hidden className="rtl:rotate-180" />
-            Leads
+            All leads
           </Link>
-          <div className="flex flex-wrap items-center gap-3.5">
+          <div className="flex flex-wrap items-start gap-3.5">
             <Avatar name={name} size="lg" />
             <div className="min-w-0 flex-1 basis-48">
               <div className="flex flex-wrap items-center gap-2.25">
@@ -114,10 +108,9 @@ export default async function LeadPage({ params }: { params: Promise<{ tenantId:
                 {tags.map((tag) => <Pill key={tag}>{tag}</Pill>)}
               </div>
               <p className="mt-0.75 text-sm text-fg-muted">
-                {lead.ownerMemberId ? `Owned by ${names.get(lead.ownerMemberId) ?? "someone"}` : "No owner yet"} · added {timeAgo(lead.createdAt)}
+                {touch ? `${SOURCE_LABEL(touch.source)}${touch.campaignId ? ` · ${touch.campaignId}` : ""} · ` : ""}added {timeAgo(lead.createdAt)} · {lead.ownerMemberId ? `owned by ${names.get(lead.ownerMemberId) ?? "someone"}` : "no owner yet"}
               </p>
             </div>
-            {pipeline && <StageSelect tenantId={tenantId} leadId={leadId} stageId={lead.stageId} stages={pipeline.stages} />}
             {phone && !contact.phoneInvalid && (
               <a href={`tel:${phone}`} className={buttonClass("primary")}>
                 <Phone size={14} aria-hidden />
@@ -125,6 +118,16 @@ export default async function LeadPage({ params }: { params: Promise<{ tenantId:
               </a>
             )}
           </div>
+          <nav className="mt-4 flex flex-wrap gap-1.5" aria-label="Stage">
+            {pipeline?.stages.map((item) => {
+              const current = item.id === lead.stageId;
+              return (
+                <ActionForm key={item.id} action={moveStageAction} hidden={{ tenantId, leadId, stageId: item.id }}>
+                  <button aria-current={current ? "step" : undefined} className={buttonClass(current ? "primary" : "ghost", "sm")}>{item.name}</button>
+                </ActionForm>
+              );
+            })}
+          </nav>
         </header>
 
         {/* Reversed so a long history opens at the newest entry, right above the composer. */}
@@ -160,7 +163,53 @@ export default async function LeadPage({ params }: { params: Promise<{ tenantId:
         </div>
       </section>
 
-      <aside aria-label="Lead detail" className="relative grid grid-cols-[minmax(0,1fr)] content-start gap-3.5 overflow-y-auto rounded-panel border border-line bg-sidebar px-4 py-4.5">
+      <aside aria-label="Lead detail" className="relative grid grid-cols-[minmax(0,1fr)] content-start gap-5 overflow-y-auto rounded-panel border border-line bg-sidebar px-4 py-4.5">
+        <section>
+          <Label className="mb-3 ps-1">{lead.score !== null ? `Why it scored ${lead.score}` : "Score"}</Label>
+          {lead.score !== null && lead.temperature ? (
+            <div className={cx("rounded-card border p-4", tempCard[lead.temperature])}>
+              <div className="flex items-center gap-3.5">
+                <ScoreRing score={lead.score} temperature={lead.temperature} />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold first-letter:uppercase">{lead.temperature} lead</p>
+                  <p className="mt-0.5 text-xs text-fg-muted">{stage.name}</p>
+                </div>
+              </div>
+              <ul className="mt-3.5 grid gap-2">
+                {[lead.summary ?? lead.scoreReason, lead.nextStep && `Next: ${lead.nextStep}`].filter(Boolean).map((line) => (
+                  <li key={line} className="flex items-start gap-2 text-xs leading-normal text-fg-soft">
+                    <span aria-hidden className={cx("mt-1.5 size-1 shrink-0 rounded-full", tempDot[lead.temperature!])} />
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className={cx(innerClass, "text-sm text-fg-muted")}>Not scored yet. AI suggestions appear here once a model is switched on.</p>
+          )}
+        </section>
+
+        <section>
+          <Label className="mb-2.5 ps-1">Lead</Label>
+          <dl className={cx(innerClass, "grid gap-2.5 text-sm")}>
+            {[
+              ["Phone", phone ?? "None"],
+              ["Email", contact.email ?? "None"],
+              ["Source", touch ? SOURCE_LABEL(touch.source) : "—"],
+              ["Campaign", touch?.campaignId ?? touch?.utmCampaign ?? "—"],
+              ["Owner", lead.ownerMemberId ? (names.get(lead.ownerMemberId) ?? "Someone") : "No owner"],
+            ].map(([key, value]) => (
+              <div key={key} className="flex justify-between gap-2.5">
+                <dt className="shrink-0 text-fg-muted">{key}</dt>
+                <dd dir={key === "Phone" || key === "Email" ? "ltr" : undefined} className="min-w-0 truncate text-end" title={value}>{value}</dd>
+              </div>
+            ))}
+          </dl>
+          {touches.length > 1 && <p className="mt-2 ps-1"><Pill>Came back {touches.length - 1} {touches.length === 2 ? "time" : "times"}</Pill></p>}
+          {contact.consentAt && <p className="mt-2 ps-1 text-xs text-fg-muted">Consent: {contact.consentSource}, {when(contact.consentAt)}</p>}
+          {can("contacts.erase") && <Link href={`/c/${tenantId}/contacts/${contact.id}`} className="mt-1.5 block ps-1 text-xs text-fg-muted underline">Privacy: export or erase</Link>}
+        </section>
+
         {(canDeliver || deliveredTo || lead.deliveryFailedAt) && (
           <section id="deliver" className={cx(innerClass, "grid grid-cols-[minmax(0,1fr)] gap-2")}>
             <div className="flex items-center justify-between gap-2.5">
@@ -196,54 +245,31 @@ export default async function LeadPage({ params }: { params: Promise<{ tenantId:
           </section>
         )}
 
-        {lead.score !== null && (lead.summary || lead.scoreReason || lead.nextStep) && (
-          <section className={cx(innerClass, "grid gap-2 text-sm leading-normal")}>
-            <p className="text-fg-soft">{lead.summary ?? lead.scoreReason}</p>
-            {lead.nextStep && <p className="text-accent">Next: {lead.nextStep}</p>}
-          </section>
-        )}
-
         <section>
-          <dl className={cx(innerClass, "grid gap-2.5 text-sm")}>
-            {[
-              ["Phone", phone ?? "None"],
-              ["Email", contact.email ?? "None"],
-              ["Source", touch ? SOURCE_LABEL(touch.source) : "—"],
-              ["Campaign", touch?.campaignId ?? touch?.utmCampaign ?? "—"],
-            ].map(([key, value]) => (
-              <div key={key} className="flex justify-between gap-2.5">
-                <dt className="shrink-0 text-fg-muted">{key}</dt>
-                <dd dir={key === "Phone" || key === "Email" ? "ltr" : undefined} className="min-w-0 truncate text-end" title={value}>{value}</dd>
-              </div>
-            ))}
-          </dl>
-          {touches.length > 1 && <p className="mt-2 ps-1"><Pill>Came back {touches.length - 1} {touches.length === 2 ? "time" : "times"}</Pill></p>}
-        </section>
-
-        <section>
-          <Label className="mb-2.5 ps-1">Follow-ups</Label>
-          <ul className="grid grid-cols-[minmax(0,1fr)] gap-2 ps-1">
-            {openTasks.map((task) => (
-              <li key={task.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="min-w-0">{task.title}<span className="block text-xs text-fg-muted">{when(task.dueAt)}</span></span>
-                <ActionForm action={completeTaskAction} hidden={{ tenantId, taskId: task.id }}><Submit variant="ghost" size="sm">Done</Submit></ActionForm>
-              </li>
-            ))}
-          </ul>
-          <details className="mt-2 ps-1">
-            <summary className="flex min-h-7 cursor-pointer list-none items-center text-sm text-accent pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">+ Add a follow-up</summary>
-            <ActionForm action={addTaskAction} hidden={{ tenantId, leadId }} className="mt-2 grid grid-cols-[minmax(0,1fr)] gap-2" resetOnOk>
-              <label className="sr-only" htmlFor="task">What to do</label>
-              <input id="task" name="title" placeholder="What to do" className={inputClass} />
+          <Label className="mb-2.5 ps-1">Tasks</Label>
+          <div className={cx(innerClass, "grid grid-cols-[minmax(0,1fr)] gap-3")}>
+            <ul className="grid grid-cols-[minmax(0,1fr)] gap-2">
+              {openTasks.map((task) => (
+                <li key={task.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="min-w-0">{task.title}<span className="block text-xs text-fg-muted">{when(task.dueAt)}</span></span>
+                  <ActionForm action={completeTaskAction} hidden={{ tenantId, taskId: task.id }}><Submit variant="ghost" size="sm">Done</Submit></ActionForm>
+                </li>
+              ))}
+              {!openTasks.length && <li className="text-sm text-fg-muted">No open tasks.</li>}
+            </ul>
+            <ActionForm action={addTaskAction} hidden={{ tenantId, leadId }} className="grid grid-cols-[minmax(0,1fr)] gap-2" resetOnOk>
+              <label className="sr-only" htmlFor="task">Task</label>
+              <input id="task" name="title" placeholder="Add a task" className={inputClass} />
               <label className="sr-only" htmlFor="due">Due</label>
               <input id="due" name="dueAt" type="datetime-local" required className={inputClass} />
-              <Submit variant="secondary">Add</Submit>
+              <Submit variant="secondary">Add task</Submit>
             </ActionForm>
-          </details>
+          </div>
         </section>
 
         {!!fields.length && (
-          <Fold title="More details">
+          <section>
+            <Label className="mb-2.5 ps-1">Details</Label>
             <ActionForm action={setFieldsAction} hidden={{ tenantId, leadId }} className={cx(innerClass, "grid grid-cols-[minmax(0,1fr)] gap-3")}>
               {fields.map((field) => (
                 <Field key={field.key} label={field.label}>
@@ -263,12 +289,13 @@ export default async function LeadPage({ params }: { params: Promise<{ tenantId:
                   )}
                 </Field>
               ))}
-              <div><Submit variant="secondary" size="sm">Save</Submit></div>
+              <div><Submit variant="secondary" size="sm">Save details</Submit></div>
             </ActionForm>
-          </Fold>
+          </section>
         )}
 
-        <Fold title="History" count={happened.length}>
+        <section>
+          <Label className="mb-2.5 ps-1">Activity</Label>
           <ul className="grid gap-3 ps-1">
             {happened.map((item) => (
               <li key={item.id} className="flex gap-2.5">
@@ -281,9 +308,7 @@ export default async function LeadPage({ params }: { params: Promise<{ tenantId:
             ))}
             {!happened.length && <li className="text-xs text-fg-muted">Nothing yet.</li>}
           </ul>
-          {contact.consentAt && <p className="mt-3 ps-1 text-xs text-fg-muted">Consent: {contact.consentSource}, {when(contact.consentAt)}</p>}
-          {can("contacts.erase") && <Link href={`/c/${tenantId}/contacts/${contact.id}`} className="mt-1.5 block ps-1 text-xs text-fg-muted underline">Privacy: export or erase</Link>}
-        </Fold>
+        </section>
       </aside>
     </div>
   );

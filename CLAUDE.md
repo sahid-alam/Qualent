@@ -101,7 +101,7 @@ The worker runs on Node's built-in TypeScript support with no build step, so `li
 
 **Use the Mobbin MCP for any design or flow decision.** Look at how real products solve it before choosing, and name what you used in your summary.
 
-Source of truth for look: `design/theme.css`, which follows www.7gence.com: near-black, white buttons, blue accent, Satoshi, small squared controls. **No orange anywhere.** [docs/design/DESIGN_SYSTEM.md](docs/design/DESIGN_SYSTEM.md) still holds the accessibility and layout rules, but its colors, radii and fonts describe the old Ember look, and `design/tokens.json` is unused. On scope (Arabic, WhatsApp, inbox, SVG logos) the PRD wins.
+Source of truth for look and accessibility: [docs/design/DESIGN_SYSTEM.md](docs/design/DESIGN_SYSTEM.md) and `design/theme.css`. It was written before scope was final, so on scope (Arabic, WhatsApp, inbox, SVG logos) the PRD wins.
 
 - Use semantic tokens (`bg-panel`, `text-fg-muted`, `border-line`). No raw colors and no inline styles.
 - Logical CSS only (`ms-`, `pe-`, `text-start`). Physical classes such as `ml-` or `text-left` fail lint.

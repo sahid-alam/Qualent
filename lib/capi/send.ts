@@ -89,7 +89,7 @@ export async function sendCapiEvent(tenantId: string, eventRowId: string) {
   await alertOps(`Meta rejected an event for tenant ${tenantId}: ${response.status}`);
   const hour = new Date().toISOString().slice(0, 13);
   await withTenant(tenantId, (db) =>
-    enqueue(db, "telegram", { type: "team_alert", tenantId, text: "Meta rejected a result. Check Settings, Meta, in Qualent." }, { singletonKey: `meta-error:${tenantId}:${hour}`, singletonSeconds: 3600 }),
+    enqueue(db, "telegram", { type: "team_alert", tenantId, text: "Meta rejected a result. Check Meta results in Qualent." }, { singletonKey: `meta-error:${tenantId}:${hour}`, singletonSeconds: 3600 }),
   );
 }
 

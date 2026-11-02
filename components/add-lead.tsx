@@ -26,7 +26,7 @@ export function AddLead({ tenantId, campaigns }: { tenantId: string; campaigns: 
           <legend className="ps-1 pb-1.5 text-fg-soft">How did they reach you?</legend>
           <div className="flex flex-wrap gap-2">
             {["WhatsApp", "Phone", "Walk-in", "Other"].map((channel, index) => (
-              <label key={channel} className="flex h-(--control-sm) cursor-pointer items-center rounded-control border border-line-strong px-3.5 text-sm has-checked:border-accent-line has-checked:bg-accent-soft has-checked:text-accent has-focus-visible:outline-2 has-focus-visible:outline-ring">
+              <label key={channel} className="flex h-(--control-sm) cursor-pointer items-center rounded-full border border-line-strong px-3.5 text-sm has-checked:border-accent-line has-checked:bg-accent-soft has-checked:text-accent has-focus-visible:outline-2 has-focus-visible:outline-ring">
                 <input type="radio" name="channel" value={channel} defaultChecked={index === 0} className="sr-only" />
                 {channel}
               </label>

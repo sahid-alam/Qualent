@@ -9,7 +9,7 @@ import { landingSnippet } from "../../../../lib/intake/snippet.ts";
 import { aiSpendThisMonth, listCustomFields, listMembers, listPipelines, listRoutingRules, setupStatus } from "../../../../lib/settings.ts";
 import { LinkTelegram, TestLead } from "../../../../components/setup-tools";
 import { ActionForm, CopyButton, Submit } from "../../../../components/forms";
-import { Field, inputClass, Label, LinkButton, PageHeader, Panel, Pill, SettingsTabs, textareaClass } from "../../../../components/ui";
+import { Field, inputClass, Label, LinkButton, PageHeader, Panel, Pill, textareaClass } from "../../../../components/ui";
 import { ClientSettings, CustomFields, EditPerson, PipelineStages } from "./sections";
 import { addPersonAction, addRuleAction, brandAction, deleteRuleAction, originsAction, saveConnectionAction, setPersonActiveAction } from "../actions";
 
@@ -47,7 +47,7 @@ function ConnectionForm({ tenantId, kind, idLabel, secretLabel, hint }: { tenant
 
 export default async function SetupPage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = await params;
-  const { membership } = await guardPage(tenantId, "settings.manage");
+  await guardPage(tenantId, "settings.manage");
   const [status, people, rules, [intake], pipelines, fields, aiSpent] = await Promise.all([
     setupStatus(tenantId),
     listMembers(tenantId),
@@ -76,18 +76,20 @@ export default async function SetupPage({ params }: { params: Promise<{ tenantId
 
   return (
     <>
-      <PageHeader title="Settings" actions={<LinkButton variant="ghost" size="sm" href="/clients/new">New client</LinkButton>} />
-      <SettingsTabs tenantId={tenantId} active="setup" isAdmin={membership.role === "platform_admin"} />
+      <PageHeader
+        title={`Set up ${status.tenant.name}`}
+        subtitle="You can start before everything is green, for example with landing pages only."
+        actions={<LinkButton href="/clients/new">New client</LinkButton>}
+      />
 
       <div className="grid gap-1.5">
-        <p className="text-sm text-fg-soft">{status.tenant.name}: {finished} of {states.length} done. You can start before everything is green.</p>
+        <div className="flex justify-between text-sm"><span className="text-fg-soft">{finished} of {states.length} done</span></div>
         <div className="h-1.5 overflow-hidden rounded-full bg-inner" role="progressbar" aria-valuenow={finished} aria-valuemin={0} aria-valuemax={states.length} aria-label="Setup progress">
           <div className="h-full rounded-full bg-(image:--gradient-bar-h)" style={{ width: `${(finished / states.length) * 100}%` }} />
         </div>
       </div>
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
-        <Label className="ps-1.5">Connect Meta</Label>
         <Item title="Meta page, for form leads" state={status.page.state} detail={status.page.detail}>
           <ConnectionForm tenantId={tenantId} kind="page" idLabel="Facebook Page ID" secretLabel="Page access token" hint="Form leads from this page arrive automatically, with a check every 15 minutes for any missed." />
         </Item>
@@ -98,7 +100,6 @@ export default async function SetupPage({ params }: { params: Promise<{ tenantId
           <ConnectionForm tenantId={tenantId} kind="ad_account" idLabel="Ad account ID (act_…)" secretLabel="Access token" hint="Daily spend per campaign, used for cost per qualified lead." />
         </Item>
 
-        <Label className="mt-3 ps-1.5">Get leads to people</Label>
         <Item title="Telegram team group" state={status.teamGroup} detail={status.telegramConfigured ? undefined : "The bot token isn't set yet, so links and alerts won't work."}>
           <p className="text-sm text-fg-muted">Open this link on a phone and choose the team group. It adds the bot there. The link works once and expires in 15 minutes.</p>
           <LinkTelegram tenantId={tenantId} label="Create group link" />
@@ -188,14 +189,11 @@ export default async function SetupPage({ params }: { params: Promise<{ tenantId
             <div><Submit variant="secondary" size="sm">Save sites</Submit></div>
           </ActionForm>
         </Item>
-      </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
-        <Label className="ps-1.5">Optional</Label>
         <Item title="Client report branding" state={brand.solidFrom ? "done" : "todo"} detail={brand.name}>
           <ActionForm action={brandAction} hidden={{ tenantId }} className="grid max-w-lg gap-3">
             <Field label="Name shown to the client"><input name="name" defaultValue={brand.name ?? status.tenant.name} className={inputClass} /></Field>
-            <Field label="Brand color" hint="We adjust it if needed so labels stay readable."><input name="color" type="color" defaultValue={brand.brand ?? "#2563eb"} className="h-10 w-20 rounded-dense border border-line-control bg-transparent" /></Field>
+            <Field label="Brand color" hint="We adjust it if needed so labels stay readable."><input name="color" type="color" defaultValue={brand.brand ?? "#ff6a2b"} className="h-10 w-20 rounded-dense border border-line-control bg-transparent" /></Field>
             <Field label="Logo" hint="PNG or WebP, under 200 KB."><input name="logo" type="file" accept="image/png,image/webp" className="w-full text-sm" /></Field>
             <div className="flex flex-wrap gap-2">
               <Submit variant="secondary" size="sm">Save branding</Submit>
@@ -203,6 +201,10 @@ export default async function SetupPage({ params }: { params: Promise<{ tenantId
             </div>
           </ActionForm>
         </Item>
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
+        <Label className="ps-1.5">Client settings</Label>
         <Item title="Time zone, currency, retention and AI budget" state="done" detail={`${status.tenant.timezone}, ${status.tenant.currency}, keeps leads ${status.tenant.retentionDays} days`}>
           <ClientSettings tenantId={tenantId} tenant={status.tenant} aiSpent={aiSpent} />
         </Item>

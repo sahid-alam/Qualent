@@ -22,31 +22,37 @@
 
 /* `dark:` follows the attribute, so a tenant/user toggle works without media queries. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-/* The full sidebar, with labels: any laptop or larger. Below this it's an icon rail. */
-@custom-variant full (@media (width >= 64rem));
+/* The full sidebar: wide screens only, and only while it isn't collapsed. */
+@custom-variant full {
+  @media (width >= 87.5rem) {
+    &:where([data-sidebar="open"], [data-sidebar="open"] *) {
+      @slot;
+    }
+  }
+}
 
 /* -----------------------------------------------------------------------------
-   1. Tenant brand hook (defaults = 7Gence: white buttons, blue accent)
+   1. Tenant brand hook (defaults = Ember orange)
    Contrast-critical vars (marked !) MUST be server-resolved per tenant; the
    pure-CSS fallback cannot guarantee AA for an arbitrary brand colour (measured
    worst case 3.05:1), so it is deliberately not attempted.
    ----------------------------------------------------------------------------- */
 :root {
-  --brand: #2563eb;
-  --brand-solid-from: #fafafa;
-  --brand-solid-to: #fafafa;
-  --brand-on-solid: #171717;
-  --brand-text-dark: #38bdf8;
-  --brand-text-light: #1d4ed8;
+  --brand: #ff6a2b;                 /* raw tenant colour: logo, glow, tints, charts */
+  --brand-solid-from: #ff8a4c;      /* ! primary fill, gradient start   (ui.tsx:10) */
+  --brand-solid-to: #e8410a;        /* ! primary fill, gradient end     (ui.tsx:10) */
+  --brand-on-solid: #1a0f0a;        /* verified against the two gradient stops only: never put text on raw --brand */        /* ! label on fill: 8.05 / 4.65:1. Proposed; Ember used #fff (2.34 / 4.04, fails) */
+  --brand-text-dark: #ff8a4c;       /* ! brand text + focus ring on dark: 8.52:1 (ui.tsx:9) */
+  --brand-text-light: #b93d0a;      /* ! brand text + focus ring on light: 5.49:1 (proposed) */
   --brand-logo: none;               /* url("…") set per tenant */
   --brand-font: var(--font-sans);   /* display/headings only; body font is locked */
 
   /* Lead temperature fills. Pinned: they never follow a client's brand. Ink label
      is at least 4.5:1 on every stop. Ember's cold end (#41678f) was lifted for that. */
-  --gradient-hot: linear-gradient(135deg, #fda4af, #f43f5e);
-  --gradient-warm: linear-gradient(135deg, #fde68a, #fbbf24);
-  --gradient-cold: linear-gradient(135deg, #7dd3fc, #38bdf8);
-  --on-temperature: #09090b;
+  --gradient-hot: linear-gradient(135deg, #ff8a4c, #e8410a);
+  --gradient-warm: linear-gradient(135deg, #e8bd6d, #c98b28);
+  --gradient-cold: linear-gradient(135deg, #7fa3c9, #5f8bb8);
+  --on-temperature: #1a0f0a;
 
   /* Avatar: the hue is hashed from the name and set on the element as --hue.
      30% lightness keeps white initials above 4.5:1 for every hue (ui.tsx:47-52). */
@@ -57,14 +63,14 @@
 [data-theme] {
   /* Redeclared on [data-theme] on purpose: a custom property's var() resolves where it
      is declared, so without this the portal's brand override on its wrapper never
-     reaches these and every chart stays the default blue. */
+     reaches these and every chart stays Ember orange. */
   /* Non-critical derivations: safe for any brand, so CSS does them. */
   --brand-soft: color-mix(in oklab, var(--brand) 13%, transparent);       /* chip fill   (ui.tsx:311) */
   --brand-line: color-mix(in oklab, var(--brand) 30%, transparent);       /* chip border (ui.tsx:310) */
   --brand-glow: color-mix(in oklab, var(--brand) 85%, transparent);       /* shadow tint; Ember used rgba(255,86,20,.9) */
   --gradient-accent: linear-gradient(135deg, var(--brand-solid-from), var(--brand-solid-to));
-  --gradient-bar: linear-gradient(180deg, var(--accent), color-mix(in oklab, var(--brand) 30%, transparent)); /* DashboardView.tsx:574 */
-  --gradient-bar-h: linear-gradient(90deg, var(--accent), var(--brand));    /* DashboardView.tsx:743 */
+  --gradient-bar: linear-gradient(180deg, var(--brand-solid-from), color-mix(in oklab, var(--brand-solid-to) 30%, transparent)); /* DashboardView.tsx:574 */
+  --gradient-bar-h: linear-gradient(90deg, var(--brand-solid-from), var(--brand-solid-to));    /* DashboardView.tsx:743 */
   --wash-hero: radial-gradient(110% 100% at 22% 0%,
       color-mix(in oklab, var(--brand) 30%, transparent) 0%,
       color-mix(in oklab, var(--brand) 7%, transparent) 40%,
@@ -78,169 +84,164 @@
 }
 
 /* -----------------------------------------------------------------------------
-   2. Semantic colours — DARK (from www.7gence.com; default)
+   2. Semantic colours — DARK (Ember, extracted; default)
    ----------------------------------------------------------------------------- */
 :root,
 [data-theme="dark"] {
   color-scheme: dark;
 
   /* Surfaces, lowest → highest */
-  --canvas: #09090b;
-  --panel: #0a0a0a;
-  --sidebar: #0c0c0e;
+  --canvas: #060505;                          /* app shell      EmberApp.tsx:227 */
+  --panel: #0a0908;                           /* main panels    ui.tsx:29 */
+  --sidebar: #100e0d;                         /* nav rail       EmberApp.tsx:243 */
   --card: rgb(255 255 255 / 0.02);            /* card on panel  ui.tsx:34 */
   --inner: rgb(255 255 255 / 0.025);          /* nested block   ui.tsx:44 */
   --control: rgb(255 255 255 / 0.04);         /* input fill     ui.tsx:326 */
   --control-hover: rgb(255 255 255 / 0.05);   /* secondary btn  ui.tsx:252 */
   --hover: rgb(255 255 255 / 0.025);          /* row hover      globals.css:117 */
   --sunken: rgb(0 0 0 / 0.3);                 /* code/prompt    ui.tsx:355 */
-  --overlay: rgb(23 23 23 / 0.92);
-  --inverse: #fafafa;
-  --on-inverse: #171717;
+  --overlay: rgb(24 20 19 / 0.92);            /* toast/menu     EmberApp.tsx:804 */
+  --inverse: #f6f3f0;                         /* active segment ui.tsx:292 */
+  --on-inverse: #0a0908;
   --scrim: rgb(0 0 0 / 0.6);                  /* modal backdrop (proposed) */
 
   /* Lines. Hairlines are decorative (WCAG 1.4.11 does not apply).
      --line-control is for boundaries that identify a control: inputs,
      checkboxes, toggle-off tracks. 3.24:1 on panel (proposed). */
-  --line: #262626;
-  --line-strong: #333333;
-  --line-hover: #525252;
-  --line-control: #6b6b6b;
+  --line: rgb(255 255 255 / 0.07);            /* ui.tsx:28 */
+  --line-strong: rgb(255 255 255 / 0.09);     /* ui.tsx:253 */
+  --line-hover: rgb(255 255 255 / 0.18);      /* globals.css:122 */
+  --line-control: rgb(255 255 255 / 0.36);
 
   /* Text ramp. FAINT (#8a817c) and DIM (#7f7772) merged into muted: they sat within
      0.2:1 of MUT and DIM failed on cards (4.40:1). */
-  --fg: #fafafa;
-  --fg-soft: #d4d4d4;
-  --fg-muted: #a3a3a3;
-  --fg-disabled: #525252;
+  --fg: #f6f3f0;                              /* 18.0:1  ui.tsx:11 */
+  --fg-soft: #c8c0bb;                         /* 11.1:1  ui.tsx:12 */
+  --fg-muted: #8d8480;                        /*  5.4:1  ui.tsx:18 */
+  --fg-disabled: #5d5551;                     /* exempt (disabled only) handoff DIM */
 
   /* Accent (resolved from the tenant hook) */
   --accent: var(--brand-text-dark);
   --ring: var(--brand-text-dark);
 
   /* Feedback. Fixed for every tenant. */
-  --good: #34d399;
-  --warn: #fbbf24;
-  --bad: #f87171;
-  --info: #38bdf8;
-  --good-soft: rgb(52 211 153 / 0.1);
-  --warn-soft: rgb(251 191 36 / 0.1);
-  --bad-soft: rgb(248 113 113 / 0.12);
-  --info-soft: rgb(56 189 248 / 0.1);
+  --good: #45c08a;                            /* 8.7:1 ui.tsx:21 */
+  --warn: #e0a94a;                            /* 9.4:1 ui.tsx:22 */
+  --bad: #ec6360;                             /* 6.2:1 ui.tsx:23 */
+  --info: #7fa3c9;                            /* 7.6:1 data.ts:44 */
+  --good-soft: rgb(69 192 138 / 0.1);
+  --warn-soft: rgb(224 169 74 / 0.12);
+  --bad-soft: rgb(236 99 96 / 0.12);
+  --info-soft: rgb(111 159 208 / 0.1);
   --on-good: #06140d;
-  --on-warn: #09090b;
+  --on-warn: #1c1816;
   --on-bad: #1a0605;
 
-  /* Lead temperature. Pinned, NOT the tenant brand: a blue-branded tenant must still
-     read hot as hot. */
-  --lead-hot: #fb7185;
-  --lead-warm: #fcd34d;
-  --lead-cold: #7dd3fc;
-  --lead-hot-soft: rgb(251 113 133 / 0.13);
-  --lead-warm-soft: rgb(252 211 77 / 0.1);
-  --lead-cold-soft: rgb(125 211 252 / 0.1);
-  --lead-hot-line: rgb(251 113 133 / 0.32);
-  --lead-warm-line: rgb(252 211 77 / 0.28);
-  --lead-cold-line: rgb(125 211 252 / 0.28);
+  /* Lead temperature (data.ts:41-45). "Hot" is pinned to Ember orange, NOT the
+     tenant brand: a blue-branded tenant must still read hot as hot. */
+  --lead-hot: #ff8a4c;
+  --lead-warm: #c9a15c;
+  --lead-cold: #7fa3c9;
+  --lead-hot-soft: rgb(255 106 43 / 0.14);
+  --lead-warm-soft: rgb(224 169 74 / 0.12);
+  --lead-cold-soft: rgb(111 159 208 / 0.1);
+  --lead-hot-line: rgb(255 106 43 / 0.3);
+  --lead-warm-line: rgb(224 169 74 / 0.26);
+  --lead-cold-line: rgb(111 159 208 / 0.24);
 
   /* Charts: categorical, all ≥3:1 on panel (proposed; 1 = tenant brand) */
   --chart-1: var(--brand-text-dark);   /* resolved, not raw brand: >=8.9:1 for any tenant */
-  --chart-2: #818cf8;
-  --chart-3: #34d399;
-  --chart-4: #fbbf24;
-  --chart-5: #c084fc;
-  --chart-6: #fb7185;
-  --chart-grid: #262626;
+  --chart-2: #6f9fd0;
+  --chart-3: #45c08a;
+  --chart-4: #e0a94a;
+  --chart-5: #9a7cf0;
+  --chart-6: #e0679a;
+  --chart-grid: rgb(255 255 255 / 0.07);
 
   /* Elevation. Ember is flat-with-hairlines; shadows only for floating layers. */
   --elev-card: none;
   --elev-pop: 0 18px 44px -14px rgb(0 0 0 / 0.85);                           /* EmberApp.tsx:807 */
   --elev-modal: 0 30px 80px -30px rgb(0 0 0 / 0.9), inset 0 1px 0 rgb(255 255 255 / 0.1); /* handoff signin card */
-  --elev-glow: none;
-  --elev-glow-lg: none;
-  --elev-nav: none;
-  --elev-live: 0 0 8px 1px rgb(52 211 153 / 0.7);
-  --scrollbar: #262626;
+  --elev-glow: 0 8px 22px -9px var(--brand-glow);                              /* ui.tsx:237 */
+  --elev-glow-lg: 0 10px 26px -8px var(--brand-glow);                          /* handoff .dc.html:133 */
+  --elev-nav: 0 4px 16px -6px color-mix(in oklab, var(--brand) 60%, transparent); /* EmberApp.tsx:515 */
+  --elev-live: 0 0 8px 1px rgb(69 192 138 / 0.7);                              /* EmberApp.tsx:628 */
+  --scrollbar: #2a2523;                                                          /* handoff .dc.html:16 */
 }
 
 /* -----------------------------------------------------------------------------
    3. Semantic colours — LIGHT (proposed; Ember had none — layout.tsx:34)
-   Cool neutrals mirroring the dark ramp. All text ≥4.5:1 on panel
+   Warm paper neutrals mirroring the warm-black ramp. All text ≥4.5:1 on panel
    and card, control lines ≥3:1. Measurements in DESIGN_SYSTEM.md section 5.
    ----------------------------------------------------------------------------- */
 [data-theme="light"] {
   color-scheme: light;
 
-  /* White buttons would vanish on a white page, so light mode flips them to dark. */
-  --brand-solid-from: #171717;
-  --brand-solid-to: #171717;
-  --brand-on-solid: #fafafa;
+  --canvas: #f3efeb;
+  --panel: #fdfcfb;
+  --sidebar: #f8f5f2;
+  --card: rgb(28 24 22 / 0.025);
+  --inner: rgb(28 24 22 / 0.03);
+  --control: rgb(28 24 22 / 0.04);
+  --control-hover: rgb(28 24 22 / 0.06);
+  --hover: rgb(28 24 22 / 0.035);
+  --sunken: rgb(28 24 22 / 0.05);
+  --overlay: rgb(253 252 251 / 0.94);
+  --inverse: #1c1816;
+  --on-inverse: #fdfcfb;
+  --scrim: rgb(28 24 22 / 0.4);
 
-  --canvas: #f4f4f5;
-  --panel: #ffffff;
-  --sidebar: #fafafa;
-  --card: rgb(9 9 11 / 0.025);
-  --inner: rgb(9 9 11 / 0.03);
-  --control: rgb(9 9 11 / 0.04);
-  --control-hover: rgb(9 9 11 / 0.06);
-  --hover: rgb(9 9 11 / 0.035);
-  --sunken: rgb(9 9 11 / 0.05);
-  --overlay: rgb(255 255 255 / 0.94);
-  --inverse: #18181b;
-  --on-inverse: #fafafa;
-  --scrim: rgb(9 9 11 / 0.4);
+  --line: rgb(28 24 22 / 0.08);
+  --line-strong: rgb(28 24 22 / 0.12);
+  --line-hover: rgb(28 24 22 / 0.22);
+  --line-control: #8f8781;                    /* 3.44:1 panel, 3.28:1 card */
 
-  --line: rgb(9 9 11 / 0.08);
-  --line-strong: rgb(9 9 11 / 0.12);
-  --line-hover: rgb(9 9 11 / 0.22);
-  --line-control: #858585;
-
-  --fg: #09090b;
-  --fg-soft: #3f3f46;
-  --fg-muted: #63636a;
-  --fg-disabled: #a1a1aa;
+  --fg: #1c1816;                              /* 17.2:1 */
+  --fg-soft: #3f3935;                         /* 11.1:1 */
+  --fg-muted: #6b625d;                        /*  5.8:1 */
+  --fg-disabled: #a39b96;
 
   --accent: var(--brand-text-light);
   --ring: var(--brand-text-light);
 
   --good: #1d7a52;                            /* 5.2:1 */
-  --warn: #6b5900;
+  --warn: #8f5f0c;                            /* 5.4:1 */
   --bad: #c0352f;                             /* 5.4:1 */
   --info: #2f6f95;                            /* 5.4:1 */
   --good-soft: rgb(29 122 82 / 0.1);
-  --warn-soft: rgb(107 89 0 / 0.1);
+  --warn-soft: rgb(143 95 12 / 0.1);
   --bad-soft: rgb(192 53 47 / 0.1);
   --info-soft: rgb(47 111 149 / 0.1);
   --on-good: #ffffff;                         /* 5.3:1 */
   --on-warn: #ffffff;
   --on-bad: #ffffff;                          /* 5.5:1 */
 
-  --lead-hot: #be123c;
-  --lead-warm: #6b5900;
-  --lead-cold: #0369a1;
-  --lead-hot-soft: rgb(190 18 60 / 0.08);
-  --lead-warm-soft: rgb(107 89 0 / 0.1);
-  --lead-cold-soft: rgb(3 105 161 / 0.1);
-  --lead-hot-line: rgb(190 18 60 / 0.28);
-  --lead-warm-line: rgb(107 89 0 / 0.28);
-  --lead-cold-line: rgb(3 105 161 / 0.28);
+  --lead-hot: #b93d0a;                        /* 5.5:1 */
+  --lead-warm: #8a6420;                       /* 5.2:1 */
+  --lead-cold: #3c6693;                       /* 5.8:1 */
+  --lead-hot-soft: rgb(185 61 10 / 0.1);
+  --lead-warm-soft: rgb(138 100 32 / 0.1);
+  --lead-cold-soft: rgb(60 102 147 / 0.1);
+  --lead-hot-line: rgb(185 61 10 / 0.28);
+  --lead-warm-line: rgb(138 100 32 / 0.28);
+  --lead-cold-line: rgb(60 102 147 / 0.28);
 
   --chart-1: var(--brand-text-light);
-  --chart-2: #4f46e5;
+  --chart-2: #3f72a8;
   --chart-3: #23895c;
-  --chart-4: #8a7300;
+  --chart-4: #a8770f;
   --chart-5: #7356d6;
   --chart-6: #c24676;
-  --chart-grid: rgb(9 9 11 / 0.08);
+  --chart-grid: rgb(28 24 22 / 0.08);
 
-  --elev-card: 0 1px 2px rgb(9 9 11 / 0.05);
-  --elev-pop: 0 12px 32px -12px rgb(9 9 11 / 0.25), 0 2px 6px rgb(9 9 11 / 0.06);
-  --elev-modal: 0 30px 80px -30px rgb(9 9 11 / 0.35);
-  --elev-glow: none;
-  --elev-glow-lg: none;
-  --elev-nav: none;
+  --elev-card: 0 1px 2px rgb(28 24 22 / 0.05);
+  --elev-pop: 0 12px 32px -12px rgb(28 24 22 / 0.25), 0 2px 6px rgb(28 24 22 / 0.06);
+  --elev-modal: 0 30px 80px -30px rgb(28 24 22 / 0.35);
+  --elev-glow: 0 8px 22px -10px color-mix(in oklab, var(--brand) 55%, transparent);
+  --elev-glow-lg: 0 10px 26px -10px color-mix(in oklab, var(--brand) 55%, transparent);
+  --elev-nav: 0 4px 14px -8px color-mix(in oklab, var(--brand) 45%, transparent);
   --elev-live: 0 0 6px 1px rgb(29 122 82 / 0.45);
-  --scrollbar: #d4d4d8;
+  --scrollbar: #d6cfc9;
 }
 
 /* -----------------------------------------------------------------------------
@@ -346,7 +347,7 @@
   --color-cold-line: var(--lead-cold-line);
 
   --color-on-temperature: var(--on-temperature);
-  --color-avatar: hsl(calc(200 + var(--hue) / 3) 45% 30%);
+  --color-avatar: hsl(var(--hue) 45% 30%);
   --color-on-avatar: var(--on-avatar);
 
   --color-chart-1: var(--chart-1);
@@ -371,10 +372,10 @@
 /* Static theme values (emitted as vars on :root; utilities reference them, so
    the :lang(ar) overrides in section 6 take effect). */
 @theme static { /* static: these are also read with var(), so Tailwind must not drop them as unused */
-  /* Fonts — load with next/font: Satoshi (--font-satoshi, self-hosted), Geist_Mono
+  /* Fonts — load with next/font: Geist (--font-geist), Geist_Mono
      (--font-geist-mono), IBM_Plex_Sans_Arabic (--font-arabic, weights 400/500/600/700).
      Geist first: Latin stays Geist, Arabic glyphs fall through to Plex. Inter dropped. */
-  --font-sans: var(--font-satoshi), var(--font-arabic, "Noto Sans Arabic"), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-geist), var(--font-arabic, "Noto Sans Arabic"), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
 
   /* Type scale (rem, so it honours user font-size). Collapses Ember's 22 px sizes
@@ -400,17 +401,17 @@
   --tracking-normal: 0em;
   --tracking-label: 0.12em;     /* mono uppercase section labels (ui.tsx:156) */
 
-  /* Radii, from www.7gence.com: small squared controls, soft cards. */
-  --radius-control: 0.475rem; /* 7.6 buttons, inputs, tabs, nav */
+  /* Radii. Ember: 999 ×126, 26 ×11, 22 ×13, 24 ×4, 20 ×4, 34 ×1.
+     Pill + 26px panel kept as the signature; small radii added for dense data UI. */
   --radius-tight: 0.375rem;   /* 6   checkbox, kbd */
-  --radius-dense: 0.5rem;
-  --radius-menu: 0.625rem;
-  --radius-row: 0.75rem;
-  --radius-card: 0.75rem;
-  --radius-tile: 1rem;
-  --radius-panel: 1rem;
-  --radius-modal: 1.5rem;
-  /* pills, for badges only: Tailwind's built-in rounded-full */
+  --radius-dense: 0.625rem;   /* 10  table rows, menu items, dense inputs (new) */
+  --radius-menu: 0.875rem;    /* 14  popover, dropdown, tooltip (new) */
+  --radius-row: 1.25rem;      /* 20  list rows (handoff README.md:146) */
+  --radius-card: 1.375rem;    /* 22  inner card, table wrapper (ui.tsx:42) */
+  --radius-tile: 1.5rem;      /* 24  stat tile (README.md:109) */
+  --radius-panel: 1.625rem;   /* 26  panels, sidebar (ui.tsx:27) */
+  --radius-modal: 2.125rem;   /* 34  modal, sign-in card */
+  /* pills: Tailwind's built-in rounded-full */
 
   /* Motion (EmberApp.tsx:37, globals.css:87-124) */
   --ease-ember: cubic-bezier(0.2, 0.8, 0.2, 1);

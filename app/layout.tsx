@@ -1,19 +1,10 @@
 import type { Metadata } from "next";
-import { Geist_Mono } from "next/font/google";
-import localFont from "next/font/local";
+import { Geist, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 import "./globals.css";
 
-// Satoshi, the font on www.7gence.com. Self-hosted: it isn't on Google Fonts.
-const sans = localFont({
-  src: [
-    { path: "./fonts/Satoshi-Regular.woff2", weight: "400" },
-    { path: "./fonts/Satoshi-Medium.woff2", weight: "500" },
-    { path: "./fonts/Satoshi-Bold.woff2", weight: "700" },
-  ],
-  variable: "--font-satoshi",
-});
+const sans = Geist({ subsets: ["latin"], variable: "--font-geist" });
 const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
 
 export const metadata: Metadata = { title: "Qualent" };

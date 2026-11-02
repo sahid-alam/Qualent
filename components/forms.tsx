@@ -57,22 +57,6 @@ export function ActionForm({
   );
 }
 
-/** A filter form in the URL. Picking from a dropdown applies it; typed boxes apply on Enter or the button. */
-export function FilterForm({ className, children }: { className?: string; children: ReactNode }) {
-  return (
-    <form
-      method="get"
-      role="search"
-      className={className}
-      onChange={(event) => {
-        if (event.target instanceof HTMLSelectElement) event.currentTarget.requestSubmit();
-      }}
-    >
-      {children}
-    </form>
-  );
-}
-
 /** A native dialog: focus trap, Escape and inert background come for free. */
 export function Dialog({ trigger, title, children, triggerVariant = "secondary", triggerSize }: { trigger: ReactNode; title: string; children: ReactNode; triggerVariant?: "primary" | "secondary" | "ghost" | "danger"; triggerSize?: "sm" | "md" }) {
   const dialog = useRef<HTMLDialogElement>(null);

@@ -3,7 +3,7 @@ import type { AutomationStep } from "../../../../lib/db/schema.ts";
 import { listRoutableMembers } from "../../../../lib/queries.ts";
 import { listAutomations, listPipelines } from "../../../../lib/settings.ts";
 import { ActionForm, Submit } from "../../../../components/forms";
-import { Empty, inlineFieldClass, inputClass, Label, PageHeader, Panel, Pill, SettingsTabs } from "../../../../components/ui";
+import { Empty, inlineFieldClass, inputClass, Label, PageHeader, Panel, Pill } from "../../../../components/ui";
 import { saveAutomationAction, setAutomationActiveAction } from "../actions";
 
 export const metadata = { title: "Automations · Qualent" };
@@ -45,7 +45,7 @@ const inline = inlineFieldClass;
 
 export default async function AutomationsPage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = await params;
-  const { membership } = await guardPage(tenantId, "settings.manage");
+  await guardPage(tenantId, "settings.manage");
   const [rules, pipelines, people] = await Promise.all([listAutomations(tenantId), listPipelines(tenantId), listRoutableMembers(tenantId)]);
   const personName = (id: string) => people.find((person) => person.id === id)?.name ?? "someone";
   const stages = pipelines[0]?.stages ?? [];
@@ -53,9 +53,7 @@ export default async function AutomationsPage({ params }: { params: Promise<{ te
 
   return (
     <>
-      <PageHeader title="Settings" />
-      <SettingsTabs tenantId={tenantId} active="automations" isAdmin={membership.role === "platform_admin"} />
-      <p className="max-w-[70ch] text-sm text-fg-muted">Follow-ups that happen without anyone remembering. A lead enters each rule once, and every wait checks again before doing anything.</p>
+      <PageHeader title="Automations" subtitle="Follow-ups that happen without anyone remembering. A lead enters each rule once, and every wait checks again before doing anything." />
 
       <Panel className="grid gap-4">
         <Label>New rule</Label>

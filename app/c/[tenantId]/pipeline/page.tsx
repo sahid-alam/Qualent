@@ -3,7 +3,7 @@ import { listBoard, listCampaigns, listRoutableMembers } from "../../../../lib/q
 import { listPipelines } from "../../../../lib/settings.ts";
 import { AddLead } from "../../../../components/add-lead";
 import { Board } from "../../../../components/board";
-import { Empty, LeadsTabs, PageHeader } from "../../../../components/ui";
+import { Empty, LinkButton, PageHeader } from "../../../../components/ui";
 
 export const metadata = { title: "Pipeline · Qualent" };
 
@@ -32,10 +32,17 @@ export default async function PipelinePage({ params }: { params: Promise<{ tenan
 
   return (
     <>
-      <PageHeader title="Leads" actions={<AddLead tenantId={tenantId} campaigns={campaigns} />} />
-      <LeadsTabs tenantId={tenantId} active="board" showNew={membership.recordScope !== "assigned"} />
+      <PageHeader
+        title={pipeline?.name ?? "Pipeline"}
+        actions={
+          <>
+            <LinkButton href={`/c/${tenantId}/leads`}>Table view</LinkButton>
+            <AddLead tenantId={tenantId} campaigns={campaigns} />
+          </>
+        }
+      />
       {!pipeline ? (
-        <Empty title="No pipeline yet" body="Create one in Settings." />
+        <Empty title="No pipeline yet" body="Create one in Client setup." />
       ) : (
         <Board tenantId={tenantId} cards={cards} stages={pipeline.stages.map(({ id, name, kind }) => ({ id, name, kind }))} />
       )}
