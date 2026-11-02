@@ -1,5 +1,7 @@
 # Qualent: Design System
 
+> **Replaced look, 2026-11-02:** the app now follows www.7gence.com, with no orange. `design/theme.css` is the source of truth for colors, radii and fonts. The Ember values below are history. The accessibility, layout and white-label rules still apply.
+
 Status: v0.1 draft · Owner: design-system agent · Date: 2026-10-25
 Companion files: [`design/theme.css`](../../design/theme.css) (Tailwind v4 drop-in) · [`design/tokens.json`](../../design/tokens.json) (DTCG tokens)
 

@@ -15,6 +15,14 @@ Legend: [x] done · [~] in progress · [ ] not started · [!] waiting on you
 - [x] Bulk controls show only once a row is ticked; filters apply on pick; board cards have no permanent dropdown
 - [x] docs/FEATURES.md lists every feature by screen, with status and what Meta needs
 
+## 7Gence theme and Netlify (2026-11-02)
+- [x] Theme matches www.7gence.com: near-black, white buttons, blue accent, Satoshi, small squared controls. No orange, in dark or light
+- [x] Hosted on Netlify (qualent-crm) against Supabase in Mumbai, instead of the planned Vercel
+- [ ] Confirm the Satoshi license allows this use
+- [ ] Test webhook processing with `after()` and its 45-second budget on Netlify
+- [ ] Check Netlify's server region with UAE counsel
+- [ ] Turn off public sign-ups in Supabase
+
 ## Waiting on you
 - [!] Review the screens
 - [!] Keys and accounts when ready: Supabase, Vercel, Telegram bot, Meta app, Sentry

@@ -36,7 +36,7 @@ function Bubble({ who, when, from, children }: { who: string; when: string; from
           <span className="font-medium text-fg-soft">{who}</span>
           <span>{when}</span>
         </p>
-        <div className={cx("rounded-[1.375rem] border px-4.25 py-3.25 text-base leading-relaxed whitespace-pre-line", lead ? "rounded-es-lg border-accent-line bg-(image:--gradient-highlight)" : "rounded-ee-lg border-line bg-control-hover")}>{children}</div>
+        <div className={cx("rounded-card border px-4.25 py-3.25 text-base leading-relaxed whitespace-pre-line", lead ? "rounded-es-lg border-accent-line bg-(image:--gradient-highlight)" : "rounded-ee-lg border-line bg-control-hover")}>{children}</div>
       </div>
     </div>
   );

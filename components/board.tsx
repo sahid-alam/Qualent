@@ -28,7 +28,7 @@ function Card({ card, stages, tenantId, onMove }: { card: BoardCard; stages: Boa
         <span className="block truncate text-2xs text-fg-muted">{card.owner ?? "No owner"}</span>
       </span>
       {/* The keyboard and touch way to move: a native dropdown behind a small icon. */}
-      <label title="Move to another stage" className="relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-full text-fg-muted hover:bg-hover hover:text-fg has-focus-visible:outline-2 has-focus-visible:outline-ring pointer-coarse:size-11">
+      <label title="Move to another stage" className="relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-control text-fg-muted hover:bg-hover hover:text-fg has-focus-visible:outline-2 has-focus-visible:outline-ring pointer-coarse:size-11">
         <ArrowRightLeft size={14} aria-hidden />
         <span className="sr-only">Move {card.name} to</span>
         <select
@@ -51,8 +51,8 @@ function Column({ stage, cards, stages, tenantId, onMove }: { stage: BoardStage;
   return (
     <section ref={setNodeRef} aria-label={stage.name} className={cx("grid w-70 shrink-0 content-start gap-2 rounded-panel border border-line bg-card p-2.5", isOver && "outline-2 outline-accent")}>
       <header className="flex items-center justify-between px-1.5 pt-1">
-        <h2 className="font-mono text-2xs tracking-label text-fg-muted uppercase">{stage.name}</h2>
-        <span className="font-mono text-2xs text-fg-muted tabular-nums">{cards.length}</span>
+        <h2 className="text-2xs font-medium tracking-label text-fg-muted uppercase">{stage.name}</h2>
+        <span className="text-2xs text-fg-muted tabular-nums">{cards.length}</span>
       </header>
       <ul className="grid gap-2">
         {cards.map((card) => (

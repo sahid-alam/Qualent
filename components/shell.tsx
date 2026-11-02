@@ -64,7 +64,7 @@ export function Sidebar({
   return (
     <aside className="sticky top-2.5 hidden h-[calc(100dvh-1.25rem)] w-(--w-rail) shrink-0 flex-col rounded-panel border border-line bg-sidebar px-2.5 py-3.5 sm:flex full:w-(--w-sidebar)">
       <div className="flex flex-col items-center justify-center gap-2.5 full:flex-row full:justify-start full:px-1">
-        <Link href={`/c/${currentTenant}/today`} title={clientName} className="grid size-8.5 shrink-0 place-items-center rounded-full bg-(image:--gradient-accent) text-sm font-bold text-on-accent shadow-glow">
+        <Link href={`/c/${currentTenant}/today`} title={clientName} className="grid size-8.5 shrink-0 place-items-center rounded-control bg-(image:--gradient-accent) text-sm font-bold text-on-accent shadow-glow">
           {initials(clientName)}
           <span className="sr-only">{clientName}, go to Today</span>
         </Link>
@@ -92,7 +92,7 @@ export function Sidebar({
         </div>
       </div>
 
-      <form action={`/c/${currentTenant}/leads`} role="search" className="mt-3 hidden h-9.5 shrink-0 items-center gap-2.5 rounded-full border border-line bg-control px-3.5 full:flex">
+      <form action={`/c/${currentTenant}/leads`} role="search" className="mt-3 hidden h-9.5 shrink-0 items-center gap-2.5 rounded-control border border-line bg-control px-3.5 full:flex">
         <Search size={14} aria-hidden className="shrink-0 text-fg-muted" />
         <label className="sr-only" htmlFor="nav-search">Search leads</label>
         <input ref={search} id="nav-search" name="q" type="search" placeholder="Search leads…" className="min-w-0 flex-1 bg-transparent text-sm text-fg placeholder:text-fg-muted" />
@@ -109,7 +109,7 @@ export function Sidebar({
               aria-current={active ? "page" : undefined}
               title={item.label}
               className={cx(
-                "relative h-(--control-lg) items-center justify-center gap-2.75 rounded-full border px-3.5 text-base transition duration-(--dur-fast) full:justify-start",
+                "relative h-(--control-lg) items-center justify-center gap-2.75 rounded-control border px-3.5 text-base transition duration-(--dur-fast) full:justify-start",
                 item.compactOnly ? "flex full:hidden" : "flex",
                 active
                   ? "border-accent-line bg-(image:--gradient-accent) font-medium text-on-accent shadow-nav full:bg-(image:--gradient-nav) full:text-fg"
@@ -129,7 +129,7 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="mt-2.5 flex flex-col items-center gap-1 rounded-card bg-card p-1.5 full:flex-row full:gap-1.5 full:rounded-full">
+      <div className="mt-2.5 flex flex-col items-center gap-1 rounded-card bg-card p-1.5 full:flex-row full:gap-1.5 full:rounded-control">
         <span title={userName}><Avatar name={userName || "?"} size="sm" /></span>
         <div className="hidden min-w-0 flex-1 leading-tight full:block">
           <p className="truncate text-sm font-medium">{userName}</p>

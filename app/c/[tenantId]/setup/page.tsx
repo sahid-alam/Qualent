@@ -195,7 +195,7 @@ export default async function SetupPage({ params }: { params: Promise<{ tenantId
         <Item title="Client report branding" state={brand.solidFrom ? "done" : "todo"} detail={brand.name}>
           <ActionForm action={brandAction} hidden={{ tenantId }} className="grid max-w-lg gap-3">
             <Field label="Name shown to the client"><input name="name" defaultValue={brand.name ?? status.tenant.name} className={inputClass} /></Field>
-            <Field label="Brand color" hint="We adjust it if needed so labels stay readable."><input name="color" type="color" defaultValue={brand.brand ?? "#ff6a2b"} className="h-10 w-20 rounded-dense border border-line-control bg-transparent" /></Field>
+            <Field label="Brand color" hint="We adjust it if needed so labels stay readable."><input name="color" type="color" defaultValue={brand.brand ?? "#2563eb"} className="h-10 w-20 rounded-dense border border-line-control bg-transparent" /></Field>
             <Field label="Logo" hint="PNG or WebP, under 200 KB."><input name="logo" type="file" accept="image/png,image/webp" className="w-full text-sm" /></Field>
             <div className="flex flex-wrap gap-2">
               <Submit variant="secondary" size="sm">Save branding</Submit>

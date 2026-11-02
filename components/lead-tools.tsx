@@ -55,7 +55,7 @@ export function LogCall({ tenantId, leadId, after }: { tenantId: string; leadId:
       <fieldset className="flex flex-wrap gap-2">
         <legend className="sr-only">Call result</legend>
         {OUTCOMES.map(([value, label], index) => (
-          <label key={value} className="flex h-(--control-sm) cursor-pointer items-center rounded-full border border-line-strong px-3.5 text-sm has-checked:border-accent-line has-checked:bg-accent-soft has-checked:text-accent has-focus-visible:outline-2 has-focus-visible:outline-ring">
+          <label key={value} className="flex h-(--control-sm) cursor-pointer items-center rounded-control border border-line-strong px-3.5 text-sm has-checked:border-accent-line has-checked:bg-accent-soft has-checked:text-accent has-focus-visible:outline-2 has-focus-visible:outline-ring">
             <input type="radio" name="outcome" value={value} defaultChecked={index === 0} className="sr-only" />
             {label}
           </label>
@@ -117,7 +117,7 @@ export function Composer({ tenantId, leadId, phone, canDraft, next }: { tenantId
             role="tab"
             aria-selected={tab === value}
             onClick={() => setTab(value)}
-            className={cx("h-7.75 rounded-full px-3.5 text-xs font-medium pointer-coarse:h-11", tab === value ? "bg-inverse text-on-inverse" : "text-fg-muted hover:text-fg")}
+            className={cx("h-7.75 rounded-control px-3.5 text-xs font-medium pointer-coarse:h-11", tab === value ? "bg-inverse text-on-inverse" : "text-fg-muted hover:text-fg")}
           >
             {label}
           </button>

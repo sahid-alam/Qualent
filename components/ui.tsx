@@ -18,7 +18,7 @@ const BUTTON_SIZES = {
 
 export function buttonClass(variant: keyof typeof BUTTONS = "secondary", size: keyof typeof BUTTON_SIZES = "md") {
   return cx(
-    "inline-flex items-center justify-center gap-2 rounded-full whitespace-nowrap transition duration-(--dur-fast) active:scale-[.97] disabled:opacity-50 disabled:pointer-events-none",
+    "inline-flex items-center justify-center gap-2 rounded-control whitespace-nowrap transition duration-(--dur-fast) active:scale-[.97] disabled:opacity-50 disabled:pointer-events-none",
     BUTTON_SIZES[size],
     BUTTONS[variant],
   );
@@ -32,7 +32,7 @@ export function LinkButton({ variant, size, className, ...props }: ComponentProp
   return <Link {...props} className={cx(buttonClass(variant, size), className)} />;
 }
 
-const fieldBase = "rounded-full border border-line-control bg-control px-4 text-base text-fg placeholder:text-fg-muted";
+const fieldBase = "rounded-control border border-line-control bg-control px-4 text-base text-fg placeholder:text-fg-muted";
 export const inputClass = `h-(--control-md) w-full ${fieldBase}`;
 /** Sized by its content, for filter bars and sentences. */
 export const inlineFieldClass = `h-(--control-md) ${fieldBase}`;
@@ -53,7 +53,7 @@ export function Panel({ className, children }: { className?: string; children: R
 }
 
 export function Label({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={cx("font-mono text-2xs tracking-label text-fg-muted uppercase", className)}>{children}</p>;
+  return <p className={cx("text-2xs font-medium tracking-label text-fg-muted uppercase", className)}>{children}</p>;
 }
 
 const TONES = {
@@ -167,13 +167,13 @@ export function PersonLink({ name, href }: { name: string; href: string }) {
 /** Tabs that are links, so the choice lives in the URL and works without script. */
 export function Segmented({ label, items }: { label: string; items: { href: string; label: ReactNode; active: boolean }[] }) {
   return (
-    <nav aria-label={label} className="flex gap-1 rounded-full border border-line bg-control p-1">
+    <nav aria-label={label} className="flex gap-1 rounded-control border border-line bg-control p-1">
       {items.map((item) => (
         <Link
           key={item.href}
           href={item.href}
           aria-current={item.active ? "true" : undefined}
-          className={cx("grid h-7.75 min-w-0 flex-1 place-items-center rounded-full px-2 text-xs font-medium whitespace-nowrap transition duration-(--dur-fast) pointer-coarse:h-11", item.active ? "bg-inverse text-on-inverse" : "text-fg-muted hover:text-fg")}
+          className={cx("grid h-7.75 min-w-0 flex-1 place-items-center rounded-tight px-2 text-xs font-medium whitespace-nowrap transition duration-(--dur-fast) pointer-coarse:h-11", item.active ? "bg-inverse text-on-inverse" : "text-fg-muted hover:text-fg")}
         >
           {item.label}
         </Link>
@@ -266,7 +266,7 @@ export function Stat({ label, value, note, emphasis }: { label: string; value: R
 export function TableWrap({ children }: { children: ReactNode }) {
   return (
     <div className="relative overflow-x-auto rounded-panel border border-line bg-card">
-      <table className="w-full border-collapse text-sm [&_td]:border-t [&_td]:border-line [&_td]:px-4.5 [&_td]:py-3 [&_td]:whitespace-nowrap [&_th]:px-4.5 [&_th]:py-3 [&_th]:text-start [&_th]:font-mono [&_th]:text-2xs [&_th]:font-medium [&_th]:tracking-label [&_th]:whitespace-nowrap [&_th]:text-fg-muted [&_th]:uppercase [&_th.num]:text-end [&_td.num]:text-end [&_td.num]:tabular-nums">
+      <table className="w-full border-collapse text-sm [&_td]:border-t [&_td]:border-line [&_td]:px-4.5 [&_td]:py-3 [&_td]:whitespace-nowrap [&_th]:px-4.5 [&_th]:py-3 [&_th]:text-start [&_th]:text-2xs [&_th]:font-medium [&_th]:tracking-label [&_th]:whitespace-nowrap [&_th]:text-fg-muted [&_th]:uppercase [&_th.num]:text-end [&_td.num]:text-end [&_td.num]:tabular-nums">
         {children}
       </table>
     </div>
